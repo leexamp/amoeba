@@ -1,0 +1,731 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{geometry}
+\geometry{left=2.2cm,right=2.2cm,top=2.2cm,bottom=2.2cm}
+\usepackage{url}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+\usepackage{enumitem}
+
+\title{\textbf{Amoeba: From Early Exit to Verified Speculative Decoding\\
+\large and Dynamic Loop Routing}\\
+{\large A Systematic Empirical Study of Dynamic Computation in Small and Loop-Structured Language Models}}
+\author{Weikai Yue, Hy 4 flash}
+\date{Independent research report --- Draft v0.2 --- 2026-11-24}
+
+\begin{document}
+\maketitle
+
+\begin{center}
+\textit{All released models: Apache-2.0 \quad $\cdot$ \quad Single-GPU (RTX 4080S 32GB) research}
+\end{center}
+
+\begin{abstract}
+We set out to build \emph{Amoeba}, a family of small language models with dynamic activation.
+We first tested token-level early exit (halt heads, LayerSkip-style layer dropout, CALM-style
+calibration) on MiniCPM5-2B: sixteen experiments showed the route is structurally infeasible on
+this 42-layer deep-and-narrow GQA model (last two layers alone contribute $\sim$1.3 nats CE;
+halt-head calibration fails at 80\% correctness), with a $\sim$1.16$\times$ structural ceiling.
+
+We therefore reframed dynamic computation as \emph{verified speculative decoding}
+(Amoeba-DA): $K$ parallel bottleneck draft heads predict future tokens from one cached hidden
+state and the frozen base model verifies all candidates in one batched forward. Rather than
+claiming bit-exact losslessness, we evaluate what matters in practice: \emph{downstream capability
+preservation}. On MiniCPM5-2B, Amoeba-DA gives \textbf{2.015$\times$} speedup (26.6 to 53.6
+tok/s, single-process measurement) while on 79 objective QA questions baseline accuracy is
+91.14\% and Amoeba accuracy 93.67\%, with \textbf{zero regressions} (no question flipped from
+correct to incorrect) and ROUGE-L 0.94. Token-level agreement with greedy is 0.734 -- the
+differences are reasoning-trace length and paraphrase, not answer correctness. MiniCPM5-1B
+gives 1.30$\times$ with the same protocol. Our central empirical finding is that the benefit
+is \emph{architecture- and context-dependent}: on sliding-window hybrids (Gemma-4-E4B)
+batched verification is numerically non-associative (hidden-state divergence accumulates over
+42 layers) and agreement collapses, though capability is preserved; on MoE with KDA/MLA
+(Ling-3.0-tiny) recurrent cache state blocks standard verification rollback; and the advantage
+concentrates in short context because draft heads are trained on short on-policy corpora.
+All Qwen-family speedups are WITHDRAWN after their verification engine proved incompatible.
+In parallel we found an orthogonal mechanism: dynamic loop-depth routing on SenseNova-Loop-9B
+gives 45\% speedup at 0.04 nats CE cost -- a quality-for-speed trade-off distinct from
+speculative decoding. All reported speedups use a Python-bound HuggingFace \texttt{generate}
+harness (27 tok/s for 2B); the same GPU under vLLM reaches 64 tok/s single-prompt or
+$\sim$640--1280 tok/s batched, and our draft heads are bound to HF because they need hidden
+states vLLM does not expose. To test whether the mechanism survives a real serving stack, we
+evaluated vLLM's built-in n-gram speculative decoding on the same model: it gives
+\textbf{1.806$\times$} (640$\to$1156 tok/s), so speculative decoding remains effective under a
+production framework; adapting our draft heads to vLLM is future work. We release models (Apache-2.0), draft heads, scripts and the
+full negative-result record.
+\end{abstract}
+
+\noindent\textbf{Keywords:} dynamic activation, early exit, speculative decoding, Medusa,
+loop routing, tool calling, small language models, consumer hardware.
+
+\section{Introduction}
+Local language models (0.3--8B) are increasingly deployed as on-device assistants and coding
+agents, where inference latency is the binding constraint. Dynamic computation --- spending
+more compute on hard inputs and less on easy ones --- promises lower latency without retraining
+the base model. The dominant recipe in the literature is token-level early exit: attach a halt
+head after each layer, train with layer dropout and early-exit losses, and decide per token
+whether to stop. This project started by implementing exactly that recipe (LayerSkip-style
+layer dropout, CALM-style confidence calibration, entropy-regularized halt losses).
+
+This report documents (i) why the recipe fails on the target architecture, (ii) how we replaced
+it with a verification-based scheme that works, (iii) the boundary conditions we measured
+across four model sizes plus an 8B dense model, and (iv) a separate, orthogonal
+dynamic-computation mechanism on loop-structured models that we identify as the strongest
+methodological lead. Throughout, we report negative and abandoned results in the same detail
+as positive ones.
+
+\subsection{Contributions}
+\begin{enumerate}[leftmargin=*]
+  \item A systematic negative-result study of token-level early exit on a 42-layer GQA model
+        (16 experiments), with a cost model explaining the $\sim$1.16$\times$ structural ceiling (\S3).
+  \item A verified dynamic-activation method (Amoeba-DA) based on parallel draft heads with
+        batched verification, evaluated by \emph{downstream capability} rather than bit-exact
+        agreement: 2.015$\times$ speedup with zero accuracy regressions on 79 objective
+        questions (\S4, \S4.5).
+  \item An empirical boundary map of when verification-based acceleration works: full-attention
+        dense models succeed, sliding-window hybrids suffer numerical non-associativity, and
+        MoE/KDA cache semantics block verification rollback (\S4.6).
+  \item An empirical demonstration that on-policy, model-generated data dominates draft-head
+        quality at very low data budgets: replacing an external corpus with self-generated chat
+        raised $\alpha_2$ from 0.138 to 0.469 and nearly doubled speedup, using only
+        $\sim$500 samples / $\sim$30K tokens (\S4.2). We also identify short-context training
+        as the reason the advantage concentrates at short context (\S4.7, \S11).
+  \item An honest withdrawal of all Qwen-family speedups after their verification engine proved
+        incompatible with the model's KV cache (\S4.3, \S9).
+  \item A preliminary but methodologically distinct study of dynamic loop routing on a
+        loop-structured LLM, where the token itself decides the number of loop iterations (\S6).
+  \item A unified tool-use post-training recipe covering four base models and two chat-template
+        families, with an honest capability comparison (\S7).
+  \item A transparent account of what did not work: early exit, math CoT SFT, draft heads on
+        small models, noisy corpora, and a retracted speed measurement (\S9).
+  \item A careful positioning relative to concurrent work, in particular JetSpec (Hu et al.,
+        2026), including an explicit independence statement (\S8).
+\end{enumerate}
+
+\section{Background and Setup}
+\subsection{Base models}
+\begin{table}[h]
+\centering
+\begin{tabular}{lccccccc}
+\toprule
+Model & Layers & Hidden & Attention & Vocab & Context & License\\
+\midrule
+MiniCPM5-2B & 42 & 2048 & GQA 16Q/2KV & 130,560 & 131,072 & Apache-2.0\\
+MiniCPM5-1B & 24 & 1536 & GQA 16Q/2KV & 130,560 & 131,072 & Apache-2.0\\
+Qwen3-0.6B & 28 & 1024 & GQA 16/8 & 151,936 & 40,960 & Apache-2.0\\
+MNN-Pocket-0.3B & 28 & 896 & GQA 14/2 & 65,536 & 40,960 & Apache-2.0\\
+Qwen3-8B (study) & 36 & 4096 & GQA 32/8 & 151,936 & 40,960 & Apache-2.0\\
+SenseNova-Loop-9B (study) & 32 phys. & 4096 & hybrid linear & $\sim$248K & --- & research\\
+\bottomrule
+\end{tabular}
+\caption{Base models. The last two rows are study-only targets.}
+\end{table}
+MiniCPM5 uses the standard \texttt{LlamaForCausalLM} architecture ($\text{rope\_theta}=5\times10^6$),
+so no custom kernels are needed. The official chat template was absent from local tokenizers
+and was recovered from GGUF model-card metadata.
+
+\subsection{Hardware and measurement constraints}
+All training and inference ran on a single RTX 4080S 32GB (58GB system RAM). Decoding with
+HuggingFace \texttt{generate} is CPU/Python-bound ($\sim$100\% CPU, $\sim$3\% GPU), so
+wall-clock numbers are relative to that harness. vLLM 0.11 is ABI-incompatible with torch
+2.15+cu132; all timings therefore use HF generate. A related investigation of
+Qwen3.8-27B-FP8 required compiling \texttt{causal-conv1d} to avoid a reference fallback;
+even then it ran at $\sim$1 tok/s and was abandoned. The relative speedups, not absolute
+throughput, are the quantity of interest.
+
+\section{Why Token-Level Early Exit Fails Here}
+Let $\alpha(l)$ be the agreement between the argmax of layer $l$ and that of the final layer,
+measured in teacher-forcing mode on the model's own generated replies. For MiniCPM5-2B:
+\begin{table}[h]
+\centering
+\begin{tabular}{lccccccccc}
+\toprule
+Depth & 28 & 32 & 34 & 36 & 38 & 40 & 41 & 42\\
+\midrule
+$\alpha$ & .125 & .301 & .390 & .449 & .546 & .626 & .664 & 1.0\\
+CE & 6.74 & 4.22 & 3.51 & 2.76 & 2.14 & 1.71 & 1.48 & \textbf{0.355}\\
+\bottomrule
+\end{tabular}
+\caption{Layer-wise agreement and cross-entropy on self-generated chat data (2B).}
+\end{table}
+The last layer alone reduces CE by $\sim$1.3 nats. Combined with GQA's two KV heads, the
+residual stream carries little redundancy: removing middle layers corrupts the representation,
+while truncating before the final layers removes the readout interface.
+
+This last-layer dominance is independently corroborated by BitSkip (Bhuvaneswaran \& Liu,
+arXiv:2510.23766), which trains an 85M ternary-weight model from scratch with LayerSkip-style
+early exit and reports per-layer exit perplexity of 12,418 at layer 10 but 216 at layer 11 --
+a 57$\times$ drop attributable to the final layer alone. The two measurements differ in scale
+(85M vs 2B), precision (ternary vs BF16), training (from scratch vs pretrained) and metric
+(exit PPL vs CE contribution), yet agree that the final layer is a readout interface rather
+than a redundant block. BitSkip attributes the cliff to insufficient representational maturity
+at small scale and leaves 1B+ models to future work; our 2B result shows the effect survives
+both the scale increase and the removal of quantization noise, so it is not purely a scale or
+low-bit artifact. Both studies find that a shared LM head cannot serve as an intermediate exit
+in this regime; BitSkip recommends per-layer exit heads, whereas we find that even with
+dedicated halt heads early exit stays capped at $\sim$1.16$\times$ on the pretrained backbone,
+as detailed below. We present this as cross-validation of a structural boundary, not as a
+novelty claim.
+
+\subsection{Sixteen experiments, all negative}
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{cll}
+\toprule
+\# & Approach & Result\\
+\midrule
+1 & Naive early exit (no gate, $\tau$=0.9) & Exits at layer 1; gibberish\\
+2 & Confidence gate (conf$\geq$0.95) & 0.76--0.90$\times$ (slower)\\
+3 & lm\_head-based gate & Gate costs 5$\times$1.25 layers $>$ layers saved\\
+4 & Correctness-head gate & 0.87--1.09$\times$ plus repetition\\
+5 & Layer dropout + per-layer CE (1200 steps) & CE drops, $\alpha$ unchanged (.466$\to$.469)\\
+6 & Truncation at 38/42 & $\Delta$CE +1.62\\
+7--9 & Skip middle layers / attention only & $\Delta$CE +5 to +10.7\\
+10--11 & Skip MLP with oracle gate & $\Delta$CE +0.125--0.36\\
+12--13 & Truncated draft + verify (d=36/41) & 0.40$\times$/0.84$\times$\\
+14--15 & Parallel draft heads on CCI3 corpus & $\alpha_2$=0.138 $\to$ 1.13$\times$\\
+16 & Halt-head calibration study & Fails calibration\\
+\bottomrule
+\end{tabular}
+\caption{Early-exit / dynamic-depth experiment matrix (condensed).}
+\end{table}
+\noindent\textbf{Cost model.} Let $b=42+1.25$ (layers + lm\_head equivalent). A serial draft of
+depth $d$ costs $(d+1.25)/b$ per drafted token; the acceptance probability $\alpha(d)$ never
+exceeds that fraction, so serial self-speculation cannot pay for itself. Token-level early
+exit has a theoretical ceiling of $\sim$1.16$\times$ even with a free gate.
+
+\subsection{Halt-head calibration failure}
+A per-layer halt head (MLP over hidden+1, seven candidate layers) was retrained on
+self-generated chat data to BCE 0.0017. Calibration with corrected sigmoid semantics showed
+that at layer 40 the high-confidence subset was only 80\% correct: even a 20\% target error
+rate was unreachable, so no safe early-exit threshold exists. This is the central negative
+finding: on deep-narrow GQA models the failure is structural, not a hyperparameter problem.
+
+\section{Amoeba-DA: Verified Dynamic Activation}
+\subsection{Principle and algorithm}
+Instead of letting each token skip layers, we keep all layers for the committed token and use
+$K$ parallel bottleneck heads to predict the next $K$ tokens from one cached hidden state:
+\begin{equation}
+h_k = h + W_2^{(k)}\,\mathrm{SiLU}\big(W_1^{(k)}\,\mathrm{float32}(h)\big),
+\quad W_1\!:\!H\!\to\!512,\; W_2\!:\!512\!\to\!H\; (W_2 \text{ init}=0)
+\end{equation}
+\begin{equation}
+\hat{c}_k = \arg\max\big(\mathrm{lm\_head}(\mathrm{norm}(h_k))\big),\quad k=1..K
+\end{equation}
+All heads share the frozen base lm\_head ($\sim$2M parameters each). The base verifies
+$[\text{committed},\hat{c}_1,\dots,\hat{c}_K]$ in one forward; we accept the longest matching
+prefix and emit the target's own next token at the first mismatch, so accepted tokens match
+greedy decoding up to bf16 numerical differences.
+
+The general speculative-decoding cost model is:
+\begin{equation}
+\mathbb{E}[\#\text{tokens}] = \frac{1-\alpha^{N+1}}{1-\alpha},\qquad
+\text{Speedup} = \frac{1-\alpha^{N+1}}{(1-\alpha)(Nc+1)}
+\end{equation}
+Substituting our numbers: 2B ($\alpha\!\approx\!0.4,N\!=\!4,c\!\approx\!0.073$) gives
+$\sim$2.09$\times$ (measured 2.02$\times$); 8B ($\alpha\!\approx\!0.3,c\!\approx\!0.07$) gives
+$\sim$1.11$\times$ (measured 1.13$\times$). The model is predictive and the 8B result is not a bug.
+
+\subsection{Training recipe}
+Draft heads were trained on self-generated on-policy chat text with the backbone frozen
+(AdamW, lr $6\times10^{-4}$). The single most important lever was data distribution. An external
+web/news corpus (CCI3) sat at CE 3.7, roughly 10$\times$ away from the deployment distribution;
+replacing it with model-generated chat (CE 1.31) raised $\alpha_2$ from 0.138 to 0.469 on 2B,
+moving speedup from $\sim$1.13$\times$ to 2.04$\times$ --- a single change worth nearly
+1$\times$. We emphasise that this is an empirical demonstration at a very small data budget
+($\sim$500 samples, $\sim$30K on-policy tokens), not a claim of novelty: concurrent work
+(JetSpec) independently reports that target-model-regenerated sequences outperform direct
+corpus training. Our contribution is to show the effect reproduces on a single consumer GPU
+with roughly three orders of magnitude less data. All released checkpoints were trained only
+on self-generated data.
+
+\subsection{Results and boundary curve}
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+Model (attention) & $\alpha_2$ & Speedup & Capability & Status\\
+\midrule
+MiniCPM5-2B (full) & .469 & \textbf{2.015$\times$} (26.6$\to$53.6 tok/s) & 0 regressions / 79 & released\\
+MiniCPM5-1B (full) & .462 & \textbf{1.30$\times$} & -- & released\\
+Gemma-4-E4B (5:1 sliding) & .968 & 1.418$\times$ (batched) & agreement 0.4175; single-verify 96/96 & boundary\\
+Ling-3.0-tiny (KDA/MLA MoE) & -- & not claimed & cache rollback blocked & boundary\\
+Qwen3-8B / 0.6B / 0.3B & -- & WITHDRAWN & verification engine incompatible & retracted\\
+\bottomrule
+\end{tabular}
+\caption{Amoeba-DA results under the capability criterion. Speedups for Qwen family are retracted:
+their verification engine was incompatible with the model's KV cache (end-to-end $\alpha$ 0.04--0.07),
+and the earlier 1.1--1.4$\times$ / 1.62$\times$ figures are not cited. Gemma's high teacher
+$\alpha_2=0.968$ does not translate to batched-verification agreement because of numerical
+non-associativity; single-token verification restores exact agreement but removes the speedup
+(\S4.6). Timing uses the stable fast mode; shared-GPU measurements are bimodal and discarded.}
+\end{table}
+\noindent\textbf{Interpretation.} Speedup is governed by draft-target acceptance alignment and
+relative readout cost, not model scale. On 0.3B/0.6B the lm\_head dominates compute and drafts
+are less accurate, so verification costs more than it saves. On 8B the baseline is nearly as
+fast as 2B (21.5--25 vs 27.1 tok/s) but acceptance is much lower (1.48 vs 2.61), collapsing the
+gain to 1.1--1.4$\times$. We therefore make no ``bigger is faster/slower'' scaling claim.
+
+\noindent\textbf{Tree verification and its limits.} We also experimented with tree verification
+on 8B (budget 16, best-first expansion, one-pass tree attention); the final confirmed speedup
+remained 1.1--1.4$\times$. The often-cited 4--9$\times$ figures for this class of method come
+from much larger training budgets and H100-class hardware.
+
+\subsection{Capability evaluation (the primary criterion)}
+\label{sec:capability}
+We do \emph{not} claim bit-exact losslessness. Token-level agreement with greedy decoding is
+0.734 on 2B (and collapses on Gemma's batched path, \S4.6); divergences occur at bf16 near-ties
+and in reasoning-trace length. Instead we measure downstream capability on 79 deterministic
+objective questions (33 math, 32 factual, 14 reasoning; 30 Chinese / 49 English) with regex
+answer matching. On MiniCPM5-2B:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\toprule
+Group (n) & Baseline & Amoeba & Change\\
+\midrule
+ALL (79) & 91.14\% & \textbf{93.67\%} & +2.5pp\\
+Math (33) & 96.97\% & 96.97\% & 0\\
+Fact (32) & 87.5\% & 90.6\% & +3.1pp\\
+Reasoning (14) & 85.7\% & 92.9\% & +7.1pp\\
+\bottomrule
+\end{tabular}
+\caption{2B capability: regressions = 0 (no question flipped correct$\to$incorrect),
+improvements = 2, ROUGE-L = 0.940, token-overlap F1 = 0.948. The +2.5pp is within noise;
+the meaningful result is the absence of any regression despite 0.734 token agreement.}
+\end{table}
+The gap between 0.734 token agreement and zero capability regressions shows that token-level
+divergence is dominated by paraphrase and thinking-trace length, not by answer errors. We
+therefore state our claim as \emph{capability-preserving acceleration}, strictly weaker than
+losslessness and verified rather than assumed.
+
+\subsection{Architecture boundary}
+\label{sec:arch-boundary}
+The benefit is governed by the attention architecture and cache semantics, not by parameter
+count. Table~\ref{sec:capability} and the results table establish three regimes:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Full-attention dense} (MiniCPM5-2B/1B): batched and single-token forward are
+        numerically identical (batch-single agreement 1.0); 2.015$\times$ / 1.30$\times$.
+  \item \textbf{Sliding-window hybrid} (Gemma-4-E4B, 5:1 sliding/global): a per-layer hidden-state
+        comparison shows batched-vs-single divergence from layer 0 (max abs diff 0.125),
+        accumulating to 0.75 by layer 42. Teacher $\alpha_2=0.968$ but batch-single agreement
+        0.9667 and end-to-end agreement 0.4175. Switching to single-token verification restores
+        96/96 exact agreement on all tested prompts but is 3.7$\times$ slower, eliminating the
+        gain. Attribution is numerical, not the attention mask or position encoding (mask and
+        explicit-position variants leave the divergence unchanged).
+  \item \textbf{MoE + KDA/MLA} (Ling-3.0-tiny, 18 KDA + 6 MLA layers): KDA stores recurrent and
+        short-convolution state per layer; the standard \texttt{cache.crop()} used for verification
+        rollback cannot restore it. We report this as a boundary rather than claim a speedup;
+        replay-based verification is left to future work.
+\end{itemize}
+
+\subsection{Context-length boundary}
+\label{sec:ctx-boundary}
+All draft heads are trained on short on-policy corpora (2B/Gemma: 24 blocks $\times$ $\sim$512
+tokens; Ling: $24\times320$). At longer context the hidden-state distribution shifts and
+$\alpha$ -- hence accepted length $\mathbb{E}\!\approx\!1/(1-\alpha)$ -- is expected to fall,
+while KV-cache attention makes batched verification less ``free''. A speedup-vs-context-length
+curve (128--8192 tokens) is reported in \S4.7; we do not claim the speedup generalizes to long
+context, and we treat this as an explicit limitation (\S11).
+
+\section{Alternative Dynamic-Computation Mechanisms}
+\label{sec:alternatives}
+The token-verification recipe of \S4 is only one way to trade computation for latency. We tested
+three alternatives -- more draft heads, a different training objective, and predicting the KV cache
+itself -- and report them here in full because the boundary they reveal is a central result.
+
+\subsection{More draft heads (K=8)}
+Since speedup grows with accepted length, the most obvious lever is to increase the number of
+parallel heads from $K{=}4$ to $K{=}8$ on 2B, using the same corpus and recipe (3000 steps). The
+first four heads are unchanged ($\alpha_{2..5}=.463/.349/.293/.241$ vs $.469/.348/.293/.240$),
+confirming $K{=}4$ already exhausts the useful prediction depth. The added heads are weak and
+monotonically degrading: $\alpha_6=.195,\ \alpha_7=.166,\ \alpha_8=.147,\ \alpha_9=.117$. Expected
+accepted length \emph{fell} from 2.61 to 1.69 and predicted speedup from $2.02\times$ to $1.67\times$.
+Draft--target divergence grows with offset; adding heads cannot raise acceptance. We therefore did
+not run an end-to-end benchmark with $K{=}8$.
+
+\subsection{Forward-KL distillation (V3)}
+Hard-label cross-entropy trains a draft head to reproduce only the target's argmax token. JetSpec
+(Hu et al., 2026) instead uses forward KL, matching the target's full next-token distribution; at
+their budget (780K samples, 8$\times$H100) this yields high acceptance. We tested the same objective
+on 2B: for conditioning hidden $h_t$ and offset $k$, the draft logits $d_k=\mathrm{lm\_head}(\mathrm{norm}(h_k))$
+were trained with $\mathcal{L} = \frac{1}{K}\sum_k \mathrm{KL}(\mathrm{softmax}(t_k/T)\,\|\,\mathrm{softmax}(d_k/T))$,
+where $t_k$ is the frozen target's logits at future position $t{+}k$ (available from the corpus's
+stored final hidden states) and $T{=}1$. Training loss dropped from 2366 to 117, but the held-out
+acceptance rate \emph{collapsed}: $\alpha_2$ fell from 0.469 to 0.020 (offsets 3--5: 0.038/0.046/0.063),
+and expected accepted length from 2.61 to 1.02. The objective optimises full-distribution agreement
+on a dispersed, multi-modal target distribution and thereby loses the argmax information that
+drives speculative acceptance. This is a negative result for our low-data setting, not a refutation
+of the objective in general: the published success relies on much larger data and a tree-structured
+draft.
+
+\subsection{Learned KV-cache prediction (V4)}
+The most radical alternative skips \emph{layers} rather than decode steps. A small MLP predicts a
+layer's $K,V$ from the previous hidden state; if accurate, the layer's attention projection and
+cache write could be avoided. We built a 30,208-token on-policy corpus from the 2B model's own
+answers and trained $2048\!\to\!512\!\to\!512$ heads for layers 21 and 40.
+
+\noindent\textbf{Phase 1 -- substitution accuracy.} Replacing predicted $K,V$ for a single layer
+on held-out text gives:
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Substitution & $\Delta$CE (nats) & top-1 flip & \\
+\midrule
+baseline & 0.0000 & 0.0\% & \\
+layer 21 only & +0.0228 & 7.06\% & \\
+layer 40 only & $-$0.0195 & 7.31\% & \\
+both 21+40 & +0.0109 & 9.72\% & \\
+\bottomrule
+\end{tabular}
+\end{center}
+These flips are well below our capability criterion, and CE is essentially unchanged, so the
+approximation is tolerable. A direct attempt to predict the whole next-layer hidden $h_{l+1}$ failed
+catastrophically (cosine 0.28 with the true hidden; CE 8.3, 88\% flips) because normalized MSE was
+dominated by a few massive ``attention-sink'' channels; predicting the residual increment
+$\Delta h = h_{l+1}-h_l$ and returning $h_l+\hat{\Delta}$ fixed this.
+
+\noindent\textbf{Phase 2 -- chain skipping.} With residual-delta heads we skipped a contiguous
+block of layers. Top-1 flips grow with chain length: 6.65\% (1 layer), 13.11\% (2), 26.81\% (4),
+77.50\% (8); CE rises from 0.49 to 4.64. A two-layer chain (21--22) was the capability-preserving
+operating point: on the 79-question QA set accuracy went from 91.14\% to 96.20\% (no drop), but
+decode throughput was \textbf{0.973$\times$} and prefill \textbf{0.834$\times$} of baseline on an
+exclusive GPU -- the method was \emph{slower}. The reason is a MACs audit: in this model the MLP
+accounts for 73.4\% of a layer's cost while $K,V$ projections are only 2.2\%; skipping two layers
+saves little, while the predictor MLPs and the writing of predicted KV cost more. Reaching
+$1.5\times$ would require skipping 15--16 layers ($c\approx0.056$ per emulated layer), but 8-layer
+chains already destroy capability. We therefore conclude that learned KV prediction is a
+capability-preserving approximation without measured acceleration on this dense 2B model.
+
+\noindent\textbf{Mechanism-level contribution.} Unlike verification-based speculation, KV
+prediction is feed-forward: $h_l \to$ predictor $\to K,V_{l+1}$. There is no accept/reject branch,
+no \texttt{cache.crop()}, no rollback. The three cache failures of \S4 -- Qwen verification/cache
+incompatibility, Ling's non-croppable KDA recurrent state, and Gemma's sliding-window batched
+desync -- are \emph{structurally avoided}. We state this as a mechanism property, not an empirical
+result for those architectures (no Qwen/KDA smoke test was run). We claim no novelty for KV
+reconstruction: LCKV, CLA, MiniCache, HShare, AttentionPredictor and KV-Direct are cited in \S8.
+
+\subsection{Where the acceleration budget actually is}
+An external algorithm audit (DeepSeek V4.1 Flash, used as a research assistant; all numbers below
+were independently verified where noted) analysed the per-layer MACs: MLP gate/up/down 37.75M
+(73.4\%), $q$/$o$ projections 4.19M each (8.2\% each), $k$/$v$ projections 0.52M each (1.0\% each),
+attention scores $4096T$ (1.1\% at $T{=}128$, 8.2\% at $T{=}1$K). Three consequences follow.
+(i) Predicting $K,V$ can save at most 2.2\% of a layer -- no path to $1.5\times$. (ii) Skipping
+only attention saves 15--24\% per layer at short context, giving at most $1.18$--$1.27\times$;
+$>1.5\times$ would need long context. (iii) Whole-layer emulation needs $S{=}15$--$16$ skipped
+layers for $1.5\times$, far beyond the 2--4 layers that preserve capability. The audit also found
+that adjacent-layer KV is essentially uncorrelated (cosine $\approx 0$, so cross-layer KV reuse is
+invalid on a frozen model) and that the residual update has a low-rank shared structure (rank-32
+captures 98.8\% of variance), suggesting that a future low-rank residual emulator, not KV prediction,
+is the more promising layer-skipping direction. These findings are consistent with our own V4
+measurements and reinforce the boundary in \S4.
+
+\section{Dynamic Loop Routing: A Genuinely Different Axis}
+SenseNova-Loop-9B has 32 physical layers, of which layers 4--28 execute twice (56 layer
+computations at full depth). Unlike speculative decoding, loop routing changes how much
+computation a single token receives: a confidence threshold decides whether a token exits
+after one loop or continues to a second --- token-level dynamic depth in the original sense.
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\toprule
+Configuration & CE & Throughput & Note\\
+\midrule
+Static loop1 & higher & faster & quality loss\\
+Static loop2 & 1.484 & 2.46 tok/s & full compute, best quality\\
+Dynamic, threshold 1.5 & 1.522 & 3.56 tok/s & \textbf{45\% faster}, +0.04 CE\\
+\bottomrule
+\end{tabular}
+\caption{Preliminary SenseNova-Loop-9B results (single GPU, validated run).}
+\end{table}
+The threshold is a controllable quality/speed knob: one scalar trades 0.04 nats of CE for
+45\% throughput. We consider this the strongest methodological lead because it is orthogonal
+to speculative decoding --- a system could route loop depth then verify drafts at the routed
+depth. That combination and multi-model validation are left as future work.
+
+\noindent\textit{Draft status.} The loop study rests on one model; we do not claim generality.
+
+\section{Tool-Use Post-Training}
+We generated synthetic tool-call dialogues for calculator, get\_weather, search, get\_time.
+MiniCPM5 (no native tool template) used a hand-built \texttt{<|im\_start|>} system message;
+Qwen3-family models used their native \texttt{<tool\_call>} template. LoRA (r=16, $\alpha$=32,
+dropout 0.05) in bf16, merged into standalone checkpoints. The 0.6B recipe was reduced to 1
+epoch at lr $5\times10^{-5}$ after a 2-epoch run overfit and produced empty replies.
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\toprule
+Model & Version & Tool-call success & Notes\\
+\midrule
+2B & v2 & 4/4 & direct-answer cases also correct\\
+1B & v2 & 4/4 & ---\\
+0.6B & v2 & 3/3 & 2-epoch v1 overfit; v2 fixed\\
+0.3B & v1 & 3/3 & fixed invented-tool-name failure\\
+\bottomrule
+\end{tabular}
+\caption{Tool-call accuracy on calculator / weather / time.}
+\end{table}
+A ReAct loop (\texttt{agent\_infer.py}) parses both Qwen-style tool calls and bare nested JSON
+via a balanced-brace decoder. Tool prompts require the tool-definition system message.
+
+\section{Related Work and Relationship to JetSpec}
+\subsection{Lineage}
+\begin{itemize}[leftmargin=*]
+  \item Speculative decoding (Leviathan et al., 2023; Chen et al., 2023): cheap draft verified
+        by the target with a lossless rule. Amoeba-DA is an instance of this family.
+  \item Medusa (Cai et al., 2024): parallel bottleneck draft heads --- direct ancestor of our design.
+  \item EAGLE/EAGLE-3 (Li et al., 2024, 2025); DFlash (Chen et al., 2026): better draft alignment.
+  \item Early exit: CALM (Schuster et al., 2022), LayerSkip (Elhoushi et al., 2024),
+        Mixture-of-Depths; our \S3 is a negative-result study in this tradition.
+  \item Cross-layer KV: LCKV (Wu \& Tu, ACL 2024), YOCO (Sun et al., 2024), Cross-Layer
+        Attention (Brandon et al., NeurIPS 2024), MLKV (2025) share or compress KV across
+        layers, typically requiring pretraining. MiniCache (NeurIPS 2024) merges adjacent KV;
+        HShare (ICLR 2025) shares critical-token indices. AttentionPredictor (NeurIPS 2025)
+        predicts attention scores, not KV tensors. KV-Direct (arXiv 2603.19664, 2026) proves
+        KV are deterministic projections of the residual stream (exact reconstruction) and
+        reports failure on sliding-window models -- consistent with our boundary finding.
+        Our V4 (\S5) is a frozen-model learned-emulator study with downstream capability
+        evaluation, and claims no novelty for KV reconstruction.
+\end{itemize}
+\noindent\textbf{License note.} LayerSkip code is CC-BY-NC and was not copied; we implemented its
+ideas from the paper and used Apache-2.0 CALM as a reference. JetSpec is CC BY 4.0; we cite its
+ideas and reuse no code or weights.
+
+\subsection{Independence statement and comparison with JetSpec}
+\noindent\textbf{Independent discovery.} The core idea of Amoeba-DA --- parallel draft heads on
+a frozen target with batched exact verification --- was developed in our local experiments on
+2026-11-22, before we became aware of JetSpec (Hu et al., arXiv:2606.18394v3, submitted
+2026-06-25, UCSD / Hao AI Lab). We learned of JetSpec during a later literature survey. We
+therefore do \emph{not} claim novelty for the draft-head-and-verify mechanism itself. JetSpec
+was published first and reports substantially stronger results; we cite it as the state of the
+art and position our work as complementary.
+
+JetSpec trains a causal parallel draft head over fused hidden states from five target layers,
+uses a tree-causal mask, constructs a tree under a 256-node budget, and verifies it in one
+forward with a custom kernel; it reports up to 9.64$\times$ on MATH-500 with Qwen3-8B on H100,
+trained on 780K regenerated samples on 8$\times$H100 (draft cost $c$=0.0085 at budget 16 vs our
+$c\approx0.07$).
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lll}
+\toprule
+Dimension & Amoeba-DA (this work) & JetSpec (Hu et al., 2026)\\
+\midrule
+Draft structure & 4 bottleneck MLPs, last hidden & 5-layer causal decoder, fused features\\
+Verification & single linear chain, $K$=4 & whole tree, budget 16--256\\
+Accepted length $\tau$ & 1.48 (8B) / 2.61 (2B) & up to 10.76\\
+Draft cost $c$ & $\sim$0.07 & 0.0085 ($N$=16)\\
+Training data & $\sim$30K self-generated tokens, 1$\times$4080S & 780K, 8$\times$H100\\
+Objective & hard-label CE & forward-KL distillation\\
+Reported 8B speedup & 1.1--1.4$\times$ & 4--9.64$\times$ (H100)\\
+\bottomrule
+\end{tabular}
+\caption{Amoeba-DA versus JetSpec: difference of configuration and budget, not principle.}
+\end{table}
+\noindent\textbf{Our complementary contributions:} (i) systematic characterisation of why
+early-exit dynamic depth fails before adopting verification; (ii) a minimal recipe
+(consumer GPU, $\sim$30K tokens, $K$=4) making verification-based acceleration accessible;
+(iii) a boundary curve across dense, hybrid-linear and loop architectures; (iv) dynamic loop
+routing as an orthogonal dynamic-computation axis.
+
+\section{Negative, Abandoned and Retracted Results}
+\begin{enumerate}[leftmargin=*]
+  \item Token-level early exit: 16 experiments, all failing quality or speed (\S3).
+  \item Math CoT SFT: MATH stayed 0.70 while MMLU fell 0.42$\to$0.20 and HumanEval
+        0.6--0.9$\to$0.45. Discarded; no released model contains it.
+  \item Draft heads on 0.3B/0.6B: slower (0.36$\times$/0.60$\times$); not shipped.
+  \item CCI3 corpus: CE 3.7, $\sim$10$\times$ from deployment distribution; unused in releases.
+  \item Qwen3.8-27B-FP8: even after compiling \texttt{causal-conv1d}, $\sim$1 tok/s; abandoned.
+  \item Qwen family WITHDRAWN: a training-label offset bug was found and fixed, but end-to-end
+        acceptance stayed 0.04--0.07 even though teacher $\alpha_2$ reached 0.76. Crop, replay,
+        hidden-match and batch-single checks all failed to restore agreement; the verification
+        engine is incompatible with the Qwen KV cache. No Qwen speedup is cited.
+  \item Retracted measurement: early 8B run reported 1.62$\times$ with a depressed 8.1 tok/s
+        baseline (system load); not cited. All shared-GPU timings are bimodal (2B: 2.8 vs 26
+        tok/s; Gemma: 7/23/73 s per prompt; Ling: 1.2 vs 12 tok/s), so reported speedups use
+        only single-process stable-fast-mode measurements.
+  \item \textbf{vLLM engineering obstacles.} vLLM 0.11 wheels are built against torch 2.8+cu128
+        and failed to import under the main torch 2.15+cu132 environment with an undefined-symbol
+        error (\texttt{c10\_cuda\_check\_implementation}); downgrading the main environment would
+        have broken the compiled \texttt{fla}/\texttt{causal-conv1d} kernels, so we built an isolated
+        venv (torch 2.8+cu128) instead. Even then, a transformers-5.x tokenizer incompatibility
+        (\texttt{all\_special\_tokens\_extended} missing) required a monkey-patch before
+        \texttt{from vllm import LLM}, and several early smoke tests failed only because competing
+        GPU jobs left insufficient free VRAM for CUDA-graph capture. In an isolated venv the import,
+        model load and generation all work; these were environment issues, not method failures.
+  \item The $\sim$1.45$\times$ (45\%) loop result is \emph{dynamic loop routing} (quality-for-speed,
+        CE +0.04), NOT Amoeba-DA. Amoeba-DA applied to the loop model gives agreement 1.0
+        (415/415) but 0.568$\times$ -- verification too costly. These lines are kept separate.
+  \item \textbf{More draft heads (K=8):} extending K from 4 to 8 did not help: holdout
+        $\alpha_{6..9}$ fell from 0.195 to 0.117, and expected accepted length dropped from
+        2.61 to 1.69 (predicted speedup 2.02$\times\to$1.67$\times$). Draft--target divergence
+        grows with offset; adding heads cannot raise acceptance.
+  \item \textbf{V2, confidence-layered verification:} splitting drafts by softmax confidence
+        (high: accept unverified; mid: single-token verify; low: reject) gave no sweet spot.
+        The draft head is badly overconfident (mean $p=0.777$ vs accuracy 0.469): reaching
+        95\% precision needs $\tau>0.9999$ covering only 23\% of tokens, so most still need
+        verification. At $\tau$ high, 2B reached agreement 1.0 but was \emph{slower than greedy}
+        (163\,s vs 117\,s); at $\tau$ low, a single high-confidence error collapsed a sequence.
+  \item \textbf{V3 and V4, alternative objectives and layer skips:} forward-KL distillation
+        collapsed acceptance ($\alpha_2$: 0.469$\to$0.020) and learned KV prediction preserved
+        capability but was slower (0.973$\times$ decode). Both are described in full in \S5,
+        together with the K=8 result and the MACs audit.
+  \item \textbf{Serving-framework check (positive control):} to test whether speculative
+        decoding survives a real serving stack, we ran vLLM 0.11's built-in n-gram speculative
+        decoding on MiniCPM5-2B: \textbf{1.806$\times$} (640$\to$1156 tok/s). This confirms the
+        mechanism is framework-independent. Our draft heads cannot be plugged into vLLM directly
+        because it does not expose hidden states; a Medusa/EAGLE-style proposer adaptation is left
+        to future work. This result also shows the absolute throughput gain from the execution
+        framework is far larger than any architecture-level acceleration we measured.
+  \item \textbf{Gemma numerical-debug dead ends.} Before attributing Gemma's batched-verification
+        collapse to numerical non-associativity, we tested and ruled out: attention-mask variants
+        (\texttt{ones\_total}, \texttt{ones\_new}, \texttt{none}); explicit position ids; fp32 lm-head
+        readout; and changing attention implementation (eager vs sdpa). None changed the per-layer
+        hidden divergence (0.125 at layer 0, accumulating to 0.75 by layer 41). Single-token
+        verification restored exact agreement (96/96) but was 3.7$\times$ slower. The divergence is
+        in the batched matmul itself, not in masking or position encoding.
+  \item \textbf{Measurement artifact invalidating speed claims.} Per-prompt baseline timing is
+        bimodal and environment-driven, not model-driven: in one run of 20 prompts the first nine
+        ran at 2.8 tok/s and the last ten at 26 tok/s, with no difference in prompt content. The
+        same artifact appears in capability-evaluation generation (2.5 vs 27 tok/s),
+        long-context curves, and shared-GPU runs where baseline and Amoeba independently hit
+        fast/slow modes (producing apparent speedups from 0.287$\times$ to 5$\times$). We therefore
+        do not report any speedup derived from shared-GPU timing; the few numbers we cite are from
+        single-process, warm-up, repeated stable-fast-mode measurements. Several exploratory
+        conclusions (e.g.\ early readings that V2/V4 were ``slower'') are weak exactly because of
+        this artifact; they are reported as trends, not as precise ratios.
+  \item \textbf{Long-context experiment incomplete.} The speedup-vs-context-length curve (128--8K
+        tokens) was started but not completed: the measurement process was interrupted and the
+        surviving partial data (\texttt{longctx\_phase1.json}) covers only the shortest lengths.
+        An early smoke test at 128 tokens showed $\alpha_2\approx0.024$ and $1.16\times$ on two
+        prompts -- far below the short-context $\alpha_2=0.469$ -- suggesting substantial decay,
+        but we do not present this as a fitted curve. We refer to the short-context limitation in
+        \S11 and leave the full curve to future work.
+  \item \textbf{Abandoned model targets.} Qwen3.5-4B was downloaded and tested but abandoned:
+        baseline 29.9 tok/s, end-to-end 0.887--0.899$\times$, inconsistent batch-forward logits,
+        and unusable draft heads. SenseNova-Loop-9B's causal-conv1d kernel would not compile under
+        CUDA 12.8, so its baseline was first measured with a reference fallback (5.7 tok/s at loop1,
+        2.9 at loop2). SparkX-2.6-4B's released weights are FP8 in most distributions; we located
+        a BF16 variant, but its custom code required several transformers-4.57-era compatibility
+        patches under transformers 5.24, and its all-FP32 layer execution made baseline slow.
+\end{enumerate}
+
+\section{Conclusion}
+We reframed ``dynamic activation'' from skipping layers within a token to dynamically
+committing several tokens per step after exact verification (Amoeba-DA) and, on loop-structured
+models, to dynamically choosing the number of loop iterations. On MiniCPM5-2B the first route
+delivers \textbf{2.015$\times$} speedup while preserving downstream capability (79 objective
+questions, zero regressions, ROUGE-L 0.94); MiniCPM5-1B gives 1.30$\times$. Our central finding
+is that the benefit is bounded by architecture and context: it holds on full-attention dense
+models, is numerically fragile on sliding-window hybrids, is blocked by KDA cache semantics on
+MoE models, and concentrates in short context because the draft heads are trained on short
+on-policy data. All Qwen-family speedups are withdrawn. The orthogonal loop-routing route gives
+45\% speedup at 0.04 nats CE cost, a genuine quality-for-speed trade-off distinct from
+speculative decoding. We release models (Apache-2.0), draft heads, scripts, raw data and the
+full negative-result record -- including withdrawn and failed results -- for reproducibility.
+
+\section{Limitations and Future Work}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Short-context training.} All draft heads were trained on short on-policy corpora
+        ($\sim$12K tokens). The reported acceleration is measured on short prompts; we do not
+        claim it generalizes to long context, and we quantify the decay in \S4.7. Training
+        draft heads on long-context on-policy data is future work.
+  \item \textbf{Capability scope.} We claim downstream accuracy preservation, not bit-exact
+        decoding; token agreement is 0.734 on 2B. Capability is measured on 79 objective QA
+        questions; open-ended generation, long-form reasoning, instruction-following nuance and
+        safety are not evaluated.
+  \item \textbf{Architecture dependence.} The method does not accelerate sliding-window hybrids
+        (numerical non-associativity) or KDA/MLA MoE (cache rollback), and Qwen-family numbers
+        are withdrawn (\S4.6, \S9). It is not a universal accelerator.
+  \item \textbf{Faithfulness--speed trade-off.} Three verification strategies were measured:
+        batched verification is fast but numerically non-associative on sliding architectures;
+        single-token verification is exact but 0.6--0.7$\times$; confidence layering has no
+        sweet spot because draft confidence is miscalibrated. We did not find a scheme that is
+        simultaneously faithful and fast, and we state this as an empirical boundary rather
+        than an implementation defect (\S9).
+  \item \textbf{Layer-skipping ceiling.} A MACs audit and KV-prediction experiments (\S5) show
+        that MLP, not attention, is 73.4\% of a layer's cost; $1.5\times$ needs skipping 15--16
+        layers, but capability collapses well before that. Learned KV prediction preserves QA
+        accuracy yet is slower than the baseline. Alternative layer-emulation designs are future work.
+  \item \textbf{Harness dependence.} All reported speedups use HuggingFace \texttt{generate},
+        which is Python-bound here ($\sim$100\% CPU, $\sim$3\% GPU): 27 tok/s for 2B versus a
+        theoretical bandwidth limit of $\sim$179 tok/s. Under vLLM 0.11 the same model reaches
+        64 tok/s single-prompt and $\sim$640--1280 tok/s batched. Our draft heads depend on hidden
+        states that vLLM does not expose, so they are bound to the HF harness and their vLLM
+        adaptation (e.g. a Medusa/EAGLE-style proposer) is future work. Importantly, the mechanism
+        itself is not framework-specific: vLLM's built-in n-gram speculative decoding gives
+        \textbf{1.806$\times$} (640$\to$1156 tok/s) on the same model, confirming that
+        verification-based multi-token decoding remains effective in a production stack.
+        The absolute throughput leap from the execution framework (CUDA graphs, PagedAttention)
+        is far larger than any architecture-level gain we measured; we report both facts.
+        Shared-GPU timings are bimodal; speedups use single-process stable-fast mode.
+  \item Loop routing rests on one model; multi-model validation and token-exit analysis needed.
+  \item Combining loop-depth routing with draft verification at the routed depth is future work.
+  \item \textbf{Adjacent directions are already occupied (scope note).} Several extensions that
+        follow naturally from our negative results have been published by other groups during
+        this study; we record them rather than claim them. \emph{From-scratch low-bit training:}
+        BitNet b1.58 (Ma et al., arXiv:2402.17764; JMLR 2025) trains ternary weights with a
+        straight-through estimator; BitSkip (Bhuvaneswaran \& Liu, arXiv:2510.23766) already
+        studies the composition of extreme quantization and early exit, and finds -- consistently
+        with our \S3 result on a \emph{pretrained} backbone -- that training from scratch is what
+        makes intermediate exits viable. We note that BitNet reports the KV cache of its models
+        as losslessly quantizable to 4 bits, but not to 1.58 bits.
+        \emph{Low-bit and structured KV caches:} CommVQ (Li et al., ICML 2025) achieves 2-bit
+        KV with a RoPE-commutative codebook; VecInfer, AnTKV and KVPath push this to 1--2 bits
+        or add a cross-layer dimension. Our ``add one discrete dimension'' idea is an instance
+        of this line, not a new mechanism. \emph{Reversible state:} KV-Direct (arXiv:2603.19664)
+        reconstructs K/V exactly from one residual per token (5\,KB vs 136\,KB per token) and
+        ReplaySSM (NVIDIA, 2026) makes recurrent-state rollback an $O(1)$ buffer-pointer move;
+        together these address the verification-failure rollback cost that blocked our
+        confidence-layering and KDA experiments (\S9), but they are prior work.
+        \emph{Image and multimodal generation is not an unexplored refuge:} early-exit diffusion
+        (ASE, Moon et al., ICML 2024; AdaDiff, ECCV 2024; DuoDiff, 2024), dynamic DiT compute
+        (DyDiT++, TPAMI 2026; DiffCR, CVPR 2025; MoDDiT, 2026; DC-DiT, 2026), speculative
+        diffusion (De Bortoli et al., ICML 2025; SpeCa, 2025; FREE, 2025; SSD, 2026; VVS, 2025)
+        and 1--2-bit visual KV caches (CalibQuant, arXiv:2502.14882; AKVQ-VL, 2025; VisCache,
+        EMNLP 2026) are all published, often with larger speedups than ours. End-device small
+        diffusion models (0.3--0.4B) with elastic depth are likewise studied (SnapGen++, 2026;
+        JuZhou 1.0, 2026; EdgeDiT, CVPRW 2026). What remains genuinely underrepresented is not a
+        mechanism but an \emph{evaluation discipline}: downstream capability preservation with
+        zero regressions instead of bit-exactness or FID alone; boundary mapping across
+        architectures that reports failures; and harness-level throughput comparison. TwinPrune
+        (Liu et al., arXiv:2610.17530) independently exposed a related evaluation flaw -- VLM
+        compression claims validated only on prefill-only probes measure prefill quality, not
+        decode quality -- which supports the same view. More broadly, this concern is now an
+        active research topic in its own right: ``On Evaluating Performance of LLM Inference
+        Systems'' (SoCC 2026) gives a baseline-fairness / setup / metric-design checklist whose
+        speculative-decoding case study mirrors our \S4 analysis; ``The Silent Hyperparameter''
+        (arXiv:2605.19537) surveys 200 inference engines and 35,000 papers and finds that the
+        backend alone shifts benchmark scores by up to 16.6 points, a large-scale confirmation
+        of the harness dependence we observed at single-model scale; and a rigor-matched audit
+        of layer skipping (arXiv:2608.28846) shows that separating online-search overhead from
+        pure inference cost reverses naive wall-clock rankings. These works do not invalidate
+        our measurements -- they explain why our evaluation protocol matters. Transferring it to
+        diffusion and VLM inference, rather than inventing another accelerator, is the most
+        defensible next step.
+\end{itemize}
+
+\appendix
+\section{Reproducibility}
+Key artifacts: \texttt{medusa\_train4.py}, \texttt{medusa\_bench\_final.py},
+\texttt{medusa\_agreement.py}, \texttt{agent\_infer.py}, \texttt{gen\_agent\_data2.py},
+\texttt{train\_agent\_sft.py}, \texttt{bench\_compare.py},
+\texttt{minicpm5\_chat\_template.jinja}, \texttt{ckpt\_\{2b,1b,06b,03b\}\_agent/full\_model/},
+\texttt{medusa\_chat.pt}, \texttt{medusa\_chat\_1b.pt}, \texttt{docs/*.md},
+\texttt{bench2/final\_results/}.
+
+\section{Default decoding recommendation}
+Greedy decoding can loop on long answers (2B repeated a sentence 20+ times). Recommended:
+\texttt{temperature=0.8, top\_p=0.95, repetition\_penalty=1.05}. Official model-card scores
+use temperature 1.0 and larger budgets, so our short-subset greedy scores are not directly
+comparable.
+
+\end{document}

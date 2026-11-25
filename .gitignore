@@ -1,0 +1,8 @@
+# Model weights (safetensors) are hosted on HuggingFace; see DOWNLOAD.md
+*.safetensors
+**/full_model/
+
+# Abandoned early-exit halt heads are NOT part of the release (16 negative experiments)
+halt_heads.pt
+
+# Draft heads (medusa_chat.pt) ARE included: needed to reproduce Amoeba-DA

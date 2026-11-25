@@ -1,0 +1,180 @@
+{
+  "name": "Amoeba release",
+  "version": "1.1",
+  "license": "apache-2.0",
+  "date": "2026-11-24",
+  "github": "https://github.com/leexamp/Amoeba",
+  "huggingface": "https://huggingface.co/leexamp",
+  "files": [
+    {
+      "path": ".gitignore",
+      "bytes": 114,
+      "sha256": "629c01c8603e4257ad1242f5720d2743960f8f83590b11ef345b52f8ce098617"
+    },
+    {
+      "path": "AMOEBA_PAPER_DRAFT.docx",
+      "bytes": 88438,
+      "sha256": "de397de8786d7fc4e20b44a0bd0988181ebb4272f4e4378b66652f7ec4c62129"
+    },
+    {
+      "path": "AMOEBA_PAPER_DRAFT.pdf",
+      "bytes": 114091,
+      "sha256": "f54ba50c83d9b02608920b213bcb7207820228e0ed5bf201a8440e8c411e0915"
+    },
+    {
+      "path": "AMOEBA_PAPER_DRAFT.tex",
+      "bytes": 50464,
+      "sha256": "6bb506fafff9155d5bce816cdcba5e47bc3e8d2061fc0d6398090dbd14e8557a"
+    },
+    {
+      "path": "DOWNLOAD.md",
+      "bytes": 644,
+      "sha256": "5e64f4cc39e122b5ef73004c3ca3ad785ec32c3bff3559100da5ae347871fde5"
+    },
+    {
+      "path": "HF_MODEL_CARD_TEMPLATE.md",
+      "bytes": 2174,
+      "sha256": "0563d7c215e799d843a1e96675c5ba50d5677b0c63ec056a01c775bd224d75a5"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "path": "README.md",
+      "bytes": 4484,
+      "sha256": "7a99bd18dcf2463a3c0a564c0d4b2fd12717e25bb6ec8d273c16e490393357b4"
+    },
+    {
+      "path": "README_legacy_earlyexit.md",
+      "bytes": 23924,
+      "sha256": "0b26bfbc7b8d35d84830a312b567f96591b28eb37445198d5d7a7285299f08dd"
+    },
+    {
+      "path": "README_zh.md",
+      "bytes": 4159,
+      "sha256": "6ae14797eb030a218aa84162b4b21d088bb70d5af1e1cc40d575d1340a5fec57"
+    },
+    {
+      "path": "README_zh_legacy.md",
+      "bytes": 20730,
+      "sha256": "d5c6c216631d8be0c47d449434fdc0985b837ab773396d319bb88487ad32a3d0"
+    },
+    {
+      "path": "Amoeba-0.3B/LICENSE",
+      "bytes": 1039,
+      "sha256": "d1e5a8c9991c338cfad3c995d0b057ded0f333803c11d1c093e53a6a5e12e807"
+    },
+    {
+      "path": "Amoeba-0.3B/README.md",
+      "bytes": 13504,
+      "sha256": "41b024612f7993ab87c4aed4b2cb6f31acd0b6b30fc3954e9f92d33985ce8ed4"
+    },
+    {
+      "path": "Amoeba-0.3B/halt_heads.pt",
+      "bytes": 118453,
+      "sha256": "0a48bbe608c178f8b9085f7610289977f0d587c718c7b55b0e1b05a48f1d8576"
+    },
+    {
+      "path": "Amoeba-0.3B/infer_with_gate.py",
+      "bytes": 5229,
+      "sha256": "1630dc74e4ec64e7cc6894d3dcbb1136ae2439eb012ed569deb738b043ae9f4c"
+    },
+    {
+      "path": "Amoeba-0.6B/LICENSE",
+      "bytes": 1039,
+      "sha256": "d1e5a8c9991c338cfad3c995d0b057ded0f333803c11d1c093e53a6a5e12e807"
+    },
+    {
+      "path": "Amoeba-0.6B/README.md",
+      "bytes": 12308,
+      "sha256": "f64f8a410c0aca1d8d9d7df21b0601274c8b28b1d23959f87ce6d627a781cb0c"
+    },
+    {
+      "path": "Amoeba-0.6B/halt_heads.pt",
+      "bytes": 132789,
+      "sha256": "67a0c2507cd02219e0c3d5befc9968c24c2eeaa24b6bab77fe368b38046a7ab5"
+    },
+    {
+      "path": "Amoeba-0.6B/infer_with_gate.py",
+      "bytes": 5229,
+      "sha256": "1630dc74e4ec64e7cc6894d3dcbb1136ae2439eb012ed569deb738b043ae9f4c"
+    },
+    {
+      "path": "Amoeba-1B/LICENSE",
+      "bytes": 1039,
+      "sha256": "d1e5a8c9991c338cfad3c995d0b057ded0f333803c11d1c093e53a6a5e12e807"
+    },
+    {
+      "path": "Amoeba-1B/README.md",
+      "bytes": 11705,
+      "sha256": "cb050ff642de49c9588ec151c1bed4460d71c02e138a298d8d3d2777c370fe8d"
+    },
+    {
+      "path": "Amoeba-1B/amoeba_da_infer.py",
+      "bytes": 4066,
+      "sha256": "a3049632aa55d414d40ec7dbad7f4a788c4345c14166c66b3e707480631c59ae"
+    },
+    {
+      "path": "Amoeba-1B/halt_heads.pt",
+      "bytes": 163189,
+      "sha256": "12a148686f744d6c9ddcedd41e08a0464c860b8670a38e399c2feacd13205997"
+    },
+    {
+      "path": "Amoeba-1B/infer_with_gate.py",
+      "bytes": 5229,
+      "sha256": "1630dc74e4ec64e7cc6894d3dcbb1136ae2439eb012ed569deb738b043ae9f4c"
+    },
+    {
+      "path": "Amoeba-1B/medusa_chat.pt",
+      "bytes": 25169839,
+      "sha256": "58d741cf22d03c93eae5c7a3889520250d023c3dd329e364efa3efe6913bbf30"
+    },
+    {
+      "path": "Amoeba-2B/LICENSE",
+      "bytes": 1039,
+      "sha256": "d1e5a8c9991c338cfad3c995d0b057ded0f333803c11d1c093e53a6a5e12e807"
+    },
+    {
+      "path": "Amoeba-2B/README.md",
+      "bytes": 13205,
+      "sha256": "d1be322d2de6dc0fccc771310da52fb50b4d8060a3ffd94f8e9002214e46d8d1"
+    },
+    {
+      "path": "Amoeba-2B/amoeba_da_infer.py",
+      "bytes": 4066,
+      "sha256": "b35b017c741d6ac0485c145f20400d19be96648111c1ecd48a35a1e3642ea554"
+    },
+    {
+      "path": "Amoeba-2B/halt_heads.pt",
+      "bytes": 370485,
+      "sha256": "3fcdbb2b437c15b21bfc85c4be3cc0f7eb785f1890e4db3aaf7bd4e5b503cd24"
+    },
+    {
+      "path": "Amoeba-2B/infer_with_gate.py",
+      "bytes": 5229,
+      "sha256": "1630dc74e4ec64e7cc6894d3dcbb1136ae2439eb012ed569deb738b043ae9f4c"
+    },
+    {
+      "path": "Amoeba-2B/medusa_chat.pt",
+      "bytes": 33558405,
+      "sha256": "cd5b64a32fb399090aabfce2f032e2d55a7754c776636ec932b7c0f488d7e7cb"
+    },
+    {
+      "path": "_LICENSES/APACHE-2.0.txt",
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "path": "_LICENSES/LICENSE_NOTE.md",
+      "bytes": 3674,
+      "sha256": "4c1c2d3c9210e7d644e71140ba296cd3eb903255dfc3f8e54e76164ed1cec097"
+    },
+    {
+      "path": "_LICENSES/MIT.txt",
+      "bytes": 1065,
+      "sha256": "6b198160f4dbfa1d792ef1b9be03db36e3e63d9edbacf1faec8d50510358bc78"
+    }
+  ]
+}
