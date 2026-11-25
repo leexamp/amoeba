@@ -1,0 +1,250 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{geometry}
+\geometry{left=2.2cm,right=2.2cm,top=2.2cm,bottom=2.2cm}
+\usepackage{url}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+\usepackage{enumitem}
+
+\title{\textbf{BRICK: Branch-Rewired Inference with Composable Knowledge}\\
+\large A Negative-Result Study of 2D Layer Topologies for Dynamic Activation\\
+\large in Frozen Small Language Models}
+\author{Weikai Yue, Hy 4 flash}
+\date{Independent research report --- Draft v0.1 --- 2026-11-25}
+
+\begin{document}
+\maketitle
+
+\begin{center}
+\textit{Follow-up to Amoeba \quad $\cdot$ \quad CPU-only empirical study \quad $\cdot$ \quad All results, including negative, reported}
+\end{center}
+
+\begin{abstract}
+We ask whether the one-dimensional layer chain of a pretrained transformer can be
+rewired into a two-dimensional topology --- parallel heterogeneous branches fused
+before a shared tail --- to enable dynamic activation without retraining the backbone.
+Motivated by the FinFET transition (changing geometry, not material) and by our earlier
+finding that middle layers of a 1B model have near-zero ablation cost, we build BRICK:
+a frozen MiniCPM5-1B whose 24 layers are rearranged as an 8-layer prelude, two parallel
+branches of 8 and 6 layers, and a 2-layer coda, with only a lightweight fusion module
+and router trained. Across a complete CPU-only experimental chain we find:
+(1) the 2D rearrangement itself is \emph{not} capability-destroying --- a trained
+fusion recovers the ``both-branches'' cross-entropy from 4.22 to 4.04;
+(2) however, \emph{skipping} a branch carries an irreducible cost of $+0.40$--$0.90$ nats,
+because the skipped branch's information is genuinely absent and cannot be reconstructed
+by fusion; (3) exposing the fusion to single-branch inputs during training makes results
+\emph{worse}, not better; (4) a Gumbel-Softmax router that balances branch usage on
+synthetic data collapses back to the deep branch on the real model. We report the full
+negative-result chain, the layer/block importance ablation that motivated the topology,
+and the boundary conditions under which 2D rewiring is and is not viable. We claim no
+novelty for the mechanisms (parallel branches, fusion, routers, early exit); the
+contribution is the empirical boundary map and the honest negative result.
+\end{abstract}
+
+\section{Introduction}
+
+Amoeba established that dynamic computation in frozen small models is bounded by
+architecture and harness: speculative decoding works on full-attention dense models,
+while early exit fails on pretrained backbones. This study asks a different question:
+what if we change the \emph{geometry} of the layer stack itself?
+
+The analogy is FinFET: the transistor did not change material, it changed shape
+(planar channel $\to$ 3D fin) to regain control and density. For transformers, the
+universal assumption is that layers form a 1D chain $0,1,\ldots,L{-}1$. We test a 2D
+execution graph: several layers are executed in parallel as branches from a shared
+hidden state and then fused. This is ``composable knowledge'': the pretrained weights
+are kept frozen, and only the composition is learned.
+
+We stress from the outset that parallel branches, mixture-of-depths, fusion and
+routers are all published mechanisms (Multi-Branch Transformer, Mixture-of-Depths,
+GateSkip). Our study is not a new
+mechanism; it is a controlled empirical test of whether these mechanisms, applied to
+a \emph{frozen} small model with a \emph{heterogeneous} 2D topology, actually deliver
+the promised dynamic activation. The answer, after a complete experimental chain,
+is largely negative --- and that is the contribution.
+
+\section{Background and Motivation}
+
+\subsection{Earlier Amoeba findings}
+\begin{enumerate}[leftmargin=*]
+  \item Token-level early exit on pretrained MiniCPM5-2B failed in 16 experiments;
+        the last layers alone contribute $\sim$1.3 nats CE and there is no redundant
+        depth to skip; structural ceiling $\sim$1.16$\times$.
+  \item Speculative decoding (Amoeba-DA) gives 2.015$\times$ on 2B but depends on a
+        verification engine incompatible with GQA/sliding-window KV caches; all Qwen
+        speedups were withdrawn.
+  \item Layer-importance analysis on 1B showed a U-shaped profile: layers 0 and 4 are
+        ``cornerstone'' layers ($\Delta$CE $+6.5$, $+5.6$), layers 22--23 are also
+        critical, while layers 5--21 have near-zero ablation cost.
+\end{enumerate}
+The third finding is the motivation for BRICK: if middle layers are redundant, can we
+arrange them as parallel branches and activate only some of them?
+
+\subsection{Why LayerSkip works and our situation does not}
+LayerSkip (Elhoushi et al., ACL 2024) also exploits the fact that early/middle layers can be
+skipped --- but it \emph{trains for it}: layer dropout (low rate early, high rate late)
+plus an early-exit loss on a shared LM head make intermediate representations directly
+decodable. BitSkip (Bhuvaneswaran \& Liu, 2026) independently reproduces this: a shared LM head
+only becomes a useful intermediate exit after from-scratch training (per-layer exit PPL
+drops from 12,418 at layer 10 to 216 at layer 11; the final-layer cliff in both studies).
+We have a pretrained backbone and no early-exit loss: redundancy exists under
+\emph{ablation} (later layers compensate) but not under \emph{readout} (intermediate
+hidden states cannot be decoded). BRICK's learned fusion is an attempt to bridge this
+gap with a lightweight module instead of full retraining.
+
+\section{Method}
+
+\subsection{2D topology}
+For MiniCPM5-1B (24 layers, hidden 1536), we use:
+\[
+  \underbrace{L_{0..7}}_{\text{prelude}(8)}
+  \;\longrightarrow\;
+  \Big[\underbrace{L_{8..15}}_{\text{branch}_0(8)},
+       \underbrace{L_{16..21}}_{\text{branch}_1(6)}\Big]
+  \;\longrightarrow\;
+  \underbrace{\text{Fusion}}_{\text{learned}}
+  \;\longrightarrow\;
+  \underbrace{L_{22..23}}_{\text{coda}(2)}
+  \;\longrightarrow\;
+  \text{LM head}.
+\]
+The two branches consume the same prelude output and execute in parallel; each uses
+\emph{distinct original layer indices}, so in HuggingFace's dynamic KV cache the 24
+cache slots are each written exactly once per token and no cache conflict arises.
+The coda always contains the final layer, since our earlier work shows it is the
+readout interface.
+
+\subsection{Fusion}
+The default fusion is a residual correction anchored at the branch mean:
+\[
+  h_{\text{out}} = \frac{1}{K}\sum_k b_k \;+\; \alpha\, W\!\left(\mathrm{concat}(b_1,\ldots,b_K)\right),
+\]
+with $W$ zero-initialized and $\alpha=1$ --- the start point is exactly the branch
+mean (no representation damage), while $W$ retains full gradient. Two alternatives
+were tested and rejected (see \S5): prelude-anchored residual
+($h_{\text{pre}}+\alpha W(\cdot)$) and an unanchored ``direct'' projection.
+
+\subsection{Router}
+A Gumbel-Softmax router (temperature annealed $1.0\to0.1$, straight-through)
+selects which branch(es) to execute per token/segment. Three oracle definitions were
+tested: (a) representation distance to a 1D teacher, (b) per-branch CE, (c)
+\emph{ablation aware}: the per-token cost of skipping each branch, i.e.\ the genuinely
+early-exit-compatible signal. Only fusion and router parameters are trained
+($<$10M); the 2GB backbone is frozen.
+
+\section{Experimental Setup}
+
+All experiments run on a CPU-only machine (Intel i7-1260P, 15.6GB RAM, PyTorch 2.15
+CPU, transformers 5.24.1). The 1B model loads in bf16 (RSS 2.36GB); one forward pass
+takes $\sim$0.3\,s, one training step (14 branch layers + fusion + coda + 130k-vocab
+LM head) takes 1.6--15\,s depending on whether CE is computed. We therefore use small
+settings (3--6 windows, seq 16, 12--50 steps) to identify \emph{trends and boundaries},
+not to claim final accuracy. Critically, two bugs that would have destroyed a remote
+GPU run were caught by these local tests: transformers 5.x requires
+\texttt{position\_embeddings=(cos,sin)} rather than \texttt{position\_ids}, and the
+fusion parameters must match the backbone dtype (bf16 vs fp32).
+
+\section{Results}
+
+\subsection{The 2D rearrangement is not itself destructive}
+With untrained fusion, the both-branch CE is 4.219. After 50 fusion steps at
+LR $3\times10^{-5}$, it drops to \textbf{4.041} (MSE $1.42\to0.03$). The gap between
+2D and 1D is learnable by a lightweight module --- the ``composable knowledge''
+premise holds for the \emph{fused} path.
+
+\subsection{Skipping a branch has an irreducible cost}
+In the full chain (trained fusion + ablation oracle + Gumbel router), the router's
+end-to-end CE is \textbf{4.4435}, i.e.\ $+0.40$ above both (4.041). The ablation
+oracle gives skip costs: both 4.04, skip branch$_0$ 4.44, skip branch$_1$ 4.83
+--- skipping either branch costs 0.4--0.8 nats. This is the central negative result:
+the skipped branch's information is genuinely absent; fusion cannot reconstruct it.
+
+\subsection{Exposing fusion to single-branch inputs makes it worse}
+We trained fusion under three input strategies for 12 steps: both-only, mixed
+(both/skip$_0$/skip$_1$), single-only. End-to-end router CE:
+both-only 5.16, mixed 5.37, single-only 5.41; both CE itself degraded from 4.267 to
+4.420 under single-branch training. Forcing fusion to ``guess'' missing information
+both fails to guess and harms normal fusion. This closes the most promising remedy.
+
+\subsection{Router behavior}
+On synthetic tiny models, a plain softmax router collapses to a single branch
+($[1.0,0.0]$); Gumbel-Softmax balances it to $[0.48,0.52]$ without any extra entropy
+or load-balancing term. On the real 1B model, however, the Gumbel router still ends at
+$[0.09,0.91]$ (all three oracles converge to the same distribution and the same CE),
+because the real branch quality gap dominates the random exploration. The oracle
+definition matters little once the backbone is frozen and fused once.
+
+\subsection{Layer and block importance}
+\begin{table}[h]
+\centering
+\begin{tabular}{lcc}
+\toprule
+Ablation (1D sequential) & $\Delta$CE & \\ \midrule
+layer 0 & $+6.51$ & cornerstone \\
+layer 4 & $+5.62$ & cornerstone \\
+layer 22 / 23 & $+5.02$ / $+3.62$ & readout \\
+layers 5--21 & $\approx 0$ & redundant \\
+\bottomrule
+\end{tabular}
+\caption{1D layer ablation: U-shaped importance (real 1B, 6 windows).}
+\end{table}
+In the BRICK 2D topology, skipping prelude layers 4--7 is catastrophic
+(CE $3.79\to15.66$, $\Delta=+11.87$), while skipping a branch costs only
+$+0.31$--$0.36$. The topology therefore places the critical layers in the
+prelude/coda and the redundant layers in the branches --- a design later justified
+by ablation. Dynamic activation is legally confined to the branch pair.
+
+\subsection{Scale dependence}
+Amoeba's 2B model has the last layer dominating ($\sim$1.3 nats); in BRICK's 1B the
+first layer dominates ($+6.51$) and the final layer contributes $+3.62$. Layer
+importance is scale-dependent, so a 2D topology optimal at one scale may not transfer.
+
+\section{Negative Results and Boundaries}
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Branch skipping is not free in 2D}: $1D$ ablation suggested $+0.07$;
+        in the 2D fused topology the real cost is $+0.4$--$0.9$ nats.
+  \item \textbf{Fusion cannot reconstruct missing information} (\S5.3).
+  \item \textbf{Gumbel balancing is scale-dependent}: works on tiny random models,
+        fails on real 1B.
+  \item \textbf{Offline oracle mismatch}: an ablation oracle computed with untrained
+        fusion locks all routers to one branch; oracle quality is only meaningful after
+        fusion training.
+  \item \textbf{CPU limits}: full convergence (hundreds of steps) and downstream task
+        evaluation require a GPU; the reported numbers are trends/boundaries, not
+        final accuracy.
+  \item \textbf{A6 (depth interpolation)} would preserve capability by evaluating
+        both branches but therefore abandons the acceleration goal; it is left as an
+        explicitly non-accelerating option.
+\end{enumerate}
+
+\section{Related Work (positioning, not novelty claims)}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Layer importance / pruning}: Investigating Layer Importance in LLMs
+        (BlackboxNLP 2024), The Curse of Depth in LLMs (NeurIPS 2025),
+        Reassessing Layer Pruning (ICLR 2026), No Free Swap (2026). Our 1D ablation
+        reproduces their U-shaped / cornerstone findings; not novel.
+  \item \textbf{Early exit}: LayerSkip (ACL 2024), BitSkip (2026). Both require
+        from-scratch training with an early-exit loss; we test a frozen backbone.
+  \item \textbf{2D / parallel topologies}: Multi-Branch Transformer (2026) and
+        DAGFormer (2026) use branches/DAG connections but train from scratch;
+        mHC / TeamFormer change training. Our difference is the frozen backbone and
+        the negative-result boundary, not the mechanism.
+  \item \textbf{Speculative decoding}: Amoeba-DA (prior work), Medusa, EAGLE, JetSpec.
+\end{itemize}
+
+\section{Conclusion}
+BRICK asked whether a pretrained small model's 1D layer chain can be rewired into a
+2D parallel-branch topology for dynamic activation. The answer is nuanced and mostly
+negative: the fused path is fully recoverable by a lightweight module (CE 4.22$\to$4.04),
+but \emph{activating only one branch} is not --- the missing branch carries real
+information whose loss costs 0.4--0.9 nats and cannot be trained away. We release the
+complete code, all experiments, and the full negative-result chain on GitHub. The
+study's value lies in the boundary map and in demonstrating, once again, that a plausible
+mechanism (parallel branches + router) does not automatically become an accelerator
+when applied to a frozen model.
+
+\end{document}

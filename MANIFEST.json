@@ -1,11 +1,16 @@
 {
   "name": "Amoeba release",
-  "version": "1.2",
+  "version": "1.3",
   "license": "apache-2.0",
   "date": "2026-11-25",
   "github": "https://github.com/leexamp/Amoeba",
   "huggingface": "https://huggingface.co/leexamp",
   "files": [
+    {
+      "path": ".gitignore",
+      "bytes": 281,
+      "sha256": "54c72492fcf6ab13a0105b1881438e842053c18a336d75e3f81c15de63702b88"
+    },
     {
       "path": "AMOEBA_PAPER_DRAFT.docx",
       "bytes": 88438,
@@ -23,8 +28,8 @@
     },
     {
       "path": "DOWNLOAD.md",
-      "bytes": 644,
-      "sha256": "5e64f4cc39e122b5ef73004c3ca3ad785ec32c3bff3559100da5ae347871fde5"
+      "bytes": 750,
+      "sha256": "b1ae1deb0e96f884cb3abee65e371b2041a58a4aeb933d1f835f9dc2c9783112"
     },
     {
       "path": "HF_MODEL_CARD_TEMPLATE.md",
@@ -38,8 +43,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 4484,
-      "sha256": "7a99bd18dcf2463a3c0a564c0d4b2fd12717e25bb6ec8d273c16e490393357b4"
+      "bytes": 5063,
+      "sha256": "2b0567d91eccfcd8af374581fd1173b996a98e7ce61ac7a4b9636a71daa61fc7"
     },
     {
       "path": "README_legacy_earlyexit.md",
@@ -57,99 +62,285 @@
       "sha256": "d5c6c216631d8be0c47d449434fdc0985b837ab773396d319bb88487ad32a3d0"
     },
     {
-      "path": "Amoeba-0.3B\\infer_with_gate.py",
+      "path": "Amoeba-0.3B/halt_heads.pt",
+      "bytes": 118453,
+      "sha256": "0a48bbe608c178f8b9085f7610289977f0d587c718c7b55b0e1b05a48f1d8576"
+    },
+    {
+      "path": "Amoeba-0.3B/infer_with_gate.py",
       "bytes": 5229,
       "sha256": "1630dc74e4ec64e7cc6894d3dcbb1136ae2439eb012ed569deb738b043ae9f4c"
     },
     {
-      "path": "Amoeba-0.3B\\LICENSE",
+      "path": "Amoeba-0.3B/LICENSE",
       "bytes": 1039,
       "sha256": "d1e5a8c9991c338cfad3c995d0b057ded0f333803c11d1c093e53a6a5e12e807"
     },
     {
-      "path": "Amoeba-0.3B\\README.md",
+      "path": "Amoeba-0.3B/README.md",
       "bytes": 13504,
       "sha256": "41b024612f7993ab87c4aed4b2cb6f31acd0b6b30fc3954e9f92d33985ce8ed4"
     },
     {
-      "path": "Amoeba-0.6B\\infer_with_gate.py",
+      "path": "Amoeba-0.6B/halt_heads.pt",
+      "bytes": 132789,
+      "sha256": "67a0c2507cd02219e0c3d5befc9968c24c2eeaa24b6bab77fe368b38046a7ab5"
+    },
+    {
+      "path": "Amoeba-0.6B/infer_with_gate.py",
       "bytes": 5229,
       "sha256": "1630dc74e4ec64e7cc6894d3dcbb1136ae2439eb012ed569deb738b043ae9f4c"
     },
     {
-      "path": "Amoeba-0.6B\\LICENSE",
+      "path": "Amoeba-0.6B/LICENSE",
       "bytes": 1039,
       "sha256": "d1e5a8c9991c338cfad3c995d0b057ded0f333803c11d1c093e53a6a5e12e807"
     },
     {
-      "path": "Amoeba-0.6B\\README.md",
+      "path": "Amoeba-0.6B/README.md",
       "bytes": 12308,
       "sha256": "f64f8a410c0aca1d8d9d7df21b0601274c8b28b1d23959f87ce6d627a781cb0c"
     },
     {
-      "path": "Amoeba-1B\\amoeba_da_infer.py",
+      "path": "Amoeba-1B/amoeba_da_infer.py",
       "bytes": 4066,
       "sha256": "a3049632aa55d414d40ec7dbad7f4a788c4345c14166c66b3e707480631c59ae"
     },
     {
-      "path": "Amoeba-1B\\infer_with_gate.py",
+      "path": "Amoeba-1B/halt_heads.pt",
+      "bytes": 163189,
+      "sha256": "12a148686f744d6c9ddcedd41e08a0464c860b8670a38e399c2feacd13205997"
+    },
+    {
+      "path": "Amoeba-1B/infer_with_gate.py",
       "bytes": 5229,
       "sha256": "1630dc74e4ec64e7cc6894d3dcbb1136ae2439eb012ed569deb738b043ae9f4c"
     },
     {
-      "path": "Amoeba-1B\\LICENSE",
+      "path": "Amoeba-1B/LICENSE",
       "bytes": 1039,
       "sha256": "d1e5a8c9991c338cfad3c995d0b057ded0f333803c11d1c093e53a6a5e12e807"
     },
     {
-      "path": "Amoeba-1B\\medusa_chat.pt",
+      "path": "Amoeba-1B/medusa_chat.pt",
       "bytes": 25169839,
       "sha256": "58d741cf22d03c93eae5c7a3889520250d023c3dd329e364efa3efe6913bbf30"
     },
     {
-      "path": "Amoeba-1B\\README.md",
+      "path": "Amoeba-1B/README.md",
       "bytes": 11705,
       "sha256": "cb050ff642de49c9588ec151c1bed4460d71c02e138a298d8d3d2777c370fe8d"
     },
     {
-      "path": "Amoeba-2B\\amoeba_da_infer.py",
+      "path": "Amoeba-2B/amoeba_da_infer.py",
       "bytes": 4066,
       "sha256": "b35b017c741d6ac0485c145f20400d19be96648111c1ecd48a35a1e3642ea554"
     },
     {
-      "path": "Amoeba-2B\\infer_with_gate.py",
+      "path": "Amoeba-2B/halt_heads.pt",
+      "bytes": 370485,
+      "sha256": "3fcdbb2b437c15b21bfc85c4be3cc0f7eb785f1890e4db3aaf7bd4e5b503cd24"
+    },
+    {
+      "path": "Amoeba-2B/infer_with_gate.py",
       "bytes": 5229,
       "sha256": "1630dc74e4ec64e7cc6894d3dcbb1136ae2439eb012ed569deb738b043ae9f4c"
     },
     {
-      "path": "Amoeba-2B\\LICENSE",
+      "path": "Amoeba-2B/LICENSE",
       "bytes": 1039,
       "sha256": "d1e5a8c9991c338cfad3c995d0b057ded0f333803c11d1c093e53a6a5e12e807"
     },
     {
-      "path": "Amoeba-2B\\medusa_chat.pt",
+      "path": "Amoeba-2B/medusa_chat.pt",
       "bytes": 33558405,
       "sha256": "cd5b64a32fb399090aabfce2f032e2d55a7754c776636ec932b7c0f488d7e7cb"
     },
     {
-      "path": "Amoeba-2B\\README.md",
+      "path": "Amoeba-2B/README.md",
       "bytes": 13205,
       "sha256": "d1be322d2de6dc0fccc771310da52fb50b4d8060a3ffd94f8e9002214e46d8d1"
     },
     {
-      "path": "_LICENSES\\APACHE-2.0.txt",
+      "path": "BRICK/ALGORITHMS.md",
+      "bytes": 21432,
+      "sha256": "35f54fe2a535cf4b090c7b9e3b3a02a60b4950489c51f8e665e053044d32a006"
+    },
+    {
+      "path": "BRICK/BRICK_PAPER.docx",
+      "bytes": 51481,
+      "sha256": "22be332abae05a3e7808a3cc1f151eb338ae07bfef550bf7e5b8a6daced87a5b"
+    },
+    {
+      "path": "BRICK/BRICK_PAPER.pdf",
+      "bytes": 64210,
+      "sha256": "02956d4c28d68341b23f26067d47d1e0cb80b81d328bda6f3cc1a978ee2acb7c"
+    },
+    {
+      "path": "BRICK/BRICK_PAPER.tex",
+      "bytes": 13789,
+      "sha256": "8fe2edc9a25e8335ec8287eb4ebb35ac85d0e1409abfe43987c8e136f0f7c38e"
+    },
+    {
+      "path": "BRICK/README.md",
+      "bytes": 5516,
+      "sha256": "f104b700d8888b8f7513ac7afbb72efde0e00b94516a2e5b473d84a59fcf694d"
+    },
+    {
+      "path": "BRICK/code/brick_config.py",
+      "bytes": 3045,
+      "sha256": "9e359aac8ed457ea7572f65308728711ede4d26b38bca49c5ef6c3185c5ca652"
+    },
+    {
+      "path": "BRICK/code/brick_depth.py",
+      "bytes": 2927,
+      "sha256": "29e54cd0a8b6ed8beed39f41a074b4a7feb37c4c992581eb218e5455db35dffd"
+    },
+    {
+      "path": "BRICK/code/brick_kv.py",
+      "bytes": 4438,
+      "sha256": "581bc17af384ea409a48a6a76d0c97da96438314421d4e47fad00363c1d29247"
+    },
+    {
+      "path": "BRICK/code/brick_model.py",
+      "bytes": 10010,
+      "sha256": "b243bedbf8cc24602711c116eb155fbbc070f517d2fea245d93b4870b6d79ff6"
+    },
+    {
+      "path": "BRICK/code/brick_router.py",
+      "bytes": 8333,
+      "sha256": "03f3155ed5c21eddf3eee4c1ae30943e0be08bb5b9a654d776b7380e09e71048"
+    },
+    {
+      "path": "BRICK/code/brick_router_gumbel.py",
+      "bytes": 3480,
+      "sha256": "d9faaf74dfd91c51d696c018d6828c76713dd00ec843c996f9a3756478a7fbe4"
+    },
+    {
+      "path": "BRICK/code/build_brick_data.py",
+      "bytes": 2683,
+      "sha256": "48118e3478c7047ecd8909aa36060cbdfc49df65b324c69d8961aae23be030ae"
+    },
+    {
+      "path": "BRICK/code/eval_brick.py",
+      "bytes": 5735,
+      "sha256": "64456882afe0cb7385fdd7b407bc5cdc4f65578bbf627d505f4566bbc49c6dee"
+    },
+    {
+      "path": "BRICK/code/layer_utils.py",
+      "bytes": 2662,
+      "sha256": "2f6c31f5eb755db2fe0b70290970e9bfba8e9043ef675a5f0df352996cfefd9e"
+    },
+    {
+      "path": "BRICK/code/run_all.sh",
+      "bytes": 1015,
+      "sha256": "3a49ecf0b5cc728b9392a2d5be29f88d8214de85dfb39683b0616e9cd490c381"
+    },
+    {
+      "path": "BRICK/code/test_cpu_1b.py",
+      "bytes": 3551,
+      "sha256": "c6a03f9390534eb7b343ac137597b5f0e87860a48e268244a098b406412c9411"
+    },
+    {
+      "path": "BRICK/code/test_cpu_1b_ablation_router.py",
+      "bytes": 4861,
+      "sha256": "e7d23dcfabeacd0985aa084eb8b40666250e3921fd898e32661edc2c27e20bfd"
+    },
+    {
+      "path": "BRICK/code/test_cpu_1b_brick_ablation.py",
+      "bytes": 4550,
+      "sha256": "a2c4a24edac72cb74f0243f85e0335fb52b9bd49047eb6e878e4d46f1b9a78bc"
+    },
+    {
+      "path": "BRICK/code/test_cpu_1b_full_pipeline.py",
+      "bytes": 6105,
+      "sha256": "8205472f19e2826b5284d820da763d53dbf6d9c538185ff8f45d84d446ce65e0"
+    },
+    {
+      "path": "BRICK/code/test_cpu_1b_fusion_modes.py",
+      "bytes": 4391,
+      "sha256": "4b201fcf1343ed5e12fa81c73b1bd600f3e5a84c7e16d0783a382a650ee2d2d4"
+    },
+    {
+      "path": "BRICK/code/test_cpu_1b_fusion_single.py",
+      "bytes": 6444,
+      "sha256": "9e81e2a8dde29692ec1ef9628253c5b1309acc60e874d2c8dd52d21f29b870cd"
+    },
+    {
+      "path": "BRICK/code/test_cpu_1b_layer_ablation.py",
+      "bytes": 3981,
+      "sha256": "f3d5a4c394189687f2d476ba8208175cb75dc7bfb1878b4813bc1426bb98c579"
+    },
+    {
+      "path": "BRICK/code/test_cpu_1b_lr_sweep.py",
+      "bytes": 2867,
+      "sha256": "9b7125f89cdd8464065a19c34d9efa0bfd542225fba53c39a5c9e2ab335f6666"
+    },
+    {
+      "path": "BRICK/code/test_cpu_1b_train.py",
+      "bytes": 4613,
+      "sha256": "298b86b1d74bc90d24f503825bb9e1c5e01aaf6dd834b59c4c26a3305185dbd3"
+    },
+    {
+      "path": "BRICK/code/test_cpu_ablation_router.py",
+      "bytes": 5321,
+      "sha256": "4410b322e84082ce7280fa33cf0580653f4ca38f7e6ecd2aad3aa3487b1be14e"
+    },
+    {
+      "path": "BRICK/code/test_cpu_gumbel.py",
+      "bytes": 5253,
+      "sha256": "fb8c96accd093155d1d1a59ac585e8c909b3b09080fc1271fdd3c60e9194eaf6"
+    },
+    {
+      "path": "BRICK/code/test_cpu_router_fix.py",
+      "bytes": 5752,
+      "sha256": "0b5a8a2a385cd7cde53f04b1890cad48fd95ae2b4714c3ab0a6b82d8adf7e485"
+    },
+    {
+      "path": "BRICK/code/test_cpu_toy.py",
+      "bytes": 5999,
+      "sha256": "3ad694162c5f6c992a99bfd474d586af6a3c3645dc5bf9a2c571126342e2faef"
+    },
+    {
+      "path": "BRICK/code/test_cpu_train.py",
+      "bytes": 5481,
+      "sha256": "28ef8ab52a3a002ffcfc73b2ef6bf90a0c47013115a5250a63a62498f63e4758"
+    },
+    {
+      "path": "BRICK/code/toy_test.py",
+      "bytes": 1993,
+      "sha256": "429672291f259d2f3985da14d1065ca4267fbfd643750030870b5e9e8aee8587"
+    },
+    {
+      "path": "BRICK/code/train_fusion.py",
+      "bytes": 3984,
+      "sha256": "9650ea993c07531c760f162121042cfa36857c46982c77c1c14b1998fcedc9c8"
+    },
+    {
+      "path": "BRICK/code/train_progressive.py",
+      "bytes": 2807,
+      "sha256": "ca9e468ac997052c3b7dca2037ccf423e37df70d5ac57020b531ab67d89482dd"
+    },
+    {
+      "path": "BRICK/code/train_router.py",
+      "bytes": 7060,
+      "sha256": "48a491b9a478380c00aaef4b26204d7ad09b37bb55c161d5065f04d14ca12eab"
+    },
+    {
+      "path": "_LICENSES/APACHE-2.0.txt",
       "bytes": 11357,
       "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
     },
     {
-      "path": "_LICENSES\\LICENSE_NOTE.md",
+      "path": "_LICENSES/LICENSE_NOTE.md",
       "bytes": 3674,
       "sha256": "4c1c2d3c9210e7d644e71140ba296cd3eb903255dfc3f8e54e76164ed1cec097"
     },
     {
-      "path": "_LICENSES\\MIT.txt",
+      "path": "_LICENSES/MIT.txt",
       "bytes": 1065,
       "sha256": "6b198160f4dbfa1d792ef1b9be03db36e3e63d9edbacf1faec8d50510358bc78"
     }
-  ]
+  ],
+  "note": "Includes BRICK follow-up study under BRICK/ (English-only)"
 }

@@ -73,6 +73,16 @@ KV prediction), the loop-routing result, a vLLM serving check, the full negative
 record, and positioning relative to Medusa / EAGLE / JetSpec / LCKV / CLA / AttentionPredictor
 / KV-Direct. We claim no novelty for the draft-head-and-verify mechanism.
 
+### Follow-up study: BRICK
+
+`BRICK/` contains an independent follow-up report and its code. It asks whether the 1D
+layer chain of a frozen small model can be rewired into a 2D topology (parallel
+heterogeneous branches fused before a shared tail) to enable dynamic activation.
+The answer is mostly negative: the fused path is learnable (CE 4.22 -> 4.04), but
+skipping a branch has an irreducible cost (+0.40-0.90 nats) because the skipped branch's
+information is genuinely absent. See `BRICK/BRICK_PAPER.pdf` and `BRICK/README.md`.
+All BRICK documents and code are English-only.
+
 ## License
 
 All Amoeba weights and this repository are Apache-2.0. Base models remain Apache-2.0
