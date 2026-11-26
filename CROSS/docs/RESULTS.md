@@ -43,6 +43,32 @@ This is what the AI reviewer's gatekeeper check was designed to catch.
 Other caveats: labelled oracle upper bound; cost K program executions — capability
 study, not acceleration.
 
+## Final gatekeeper tests (2026-11-26, pending)
+An external review identified three confounds that must be resolved before the
+conclusions are final. `test_final_gates.py` runs all three with cached program
+hidden states (backbone executed once, then all tests are cheap):
+
+1. **Fixed-weight fusion comparison — COMPLETED (decisive)**: prior held-out
+   weights were one-hot, so the hidden-vs-prob gap was selection, not fusion.
+   Clean test with fixed weights on 20 windows:
+
+   | weights | hidden CE | prob CE | Jensen bound | best single |
+   |---|---|---|---|---|
+   | uniform [.25]^4 | 3.827 | **3.719** | 3.966 | 3.880 |
+   | in-sample [.17,.05,.25,.53] | 3.879 | **3.774** | 3.956 | 3.880 |
+
+   prob <= Jensen bound in both; prob 3.719 < best single 3.880 — a real fusion
+   gain with theoretical backing. The "fusion is empty" worry is resolved:
+   fusion helps when weights are fixed; the earlier one-hot runs only selected.
+2. **Held-out n — COMPLETED, claim withdrawn**: 14 held-out windows (210 tokens),
+   paired per-token bootstrap. fusion 3.775, P0 3.850, oracle 3.240; paired
+   fusion-P0 = -0.075, 95% CI [-0.156, +0.012] — **crosses zero**. The earlier
+   3-window gap of -0.786 was sampling noise. "Programs beat identity" is withdrawn.
+3. **Seed stability**: 5 seeds, check whether program selection is consistent
+   (signal) or random (luck).
+
+Results to be inserted. Conclusions (a) and (b) are held pending these tests.
+
 ## Selector force-P0 experiment (2026-11-26)
 
 Re-running the selector with a different (10-step) teacher router:

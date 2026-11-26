@@ -1,6 +1,6 @@
 {
   "name": "Amoeba release",
-  "version": "1.5",
+  "version": "1.6",
   "license": "apache-2.0",
   "date": "2026-11-26",
   "github": "https://github.com/leexamp/Amoeba",
@@ -328,23 +328,23 @@
     },
     {
       "path": "CROSS/CROSS_PAPER.docx",
-      "bytes": 53317,
-      "sha256": "87dfd349d23114ff5fccae4442d4c626ee0182d5d32c55afc24b809bb254e5ae"
+      "bytes": 55442,
+      "sha256": "371593e0ebca717bd540275b39773738e9d0a42d8ad2c5f21852e42e1862f6db"
     },
     {
       "path": "CROSS/CROSS_PAPER.pdf",
-      "bytes": 67099,
-      "sha256": "fd3c8b1e745eda3e8e4d265e25a7b74a4b984301a53b7f6dd3a2c1c8e1d87a78"
+      "bytes": 69785,
+      "sha256": "30062cd5ab00a23185e498eb931762393be675f7d1536b134a3a8f79c8f63b07"
     },
     {
       "path": "CROSS/CROSS_PAPER.tex",
-      "bytes": 15627,
-      "sha256": "36ea304201c5b94e79c1258c37103ddb605c49d3976ed8460367794c028dfcce"
+      "bytes": 17593,
+      "sha256": "f7120ebc7057983e96006cd17d35a7916e1afc5f1b1e9642db978a7e8bf21e0e"
     },
     {
       "path": "CROSS/README.md",
-      "bytes": 4947,
-      "sha256": "a213e71c7acdfe5bb766fd80222cff347411753a4e3d14fd8b083bec6d7e8aa6"
+      "bytes": 4823,
+      "sha256": "aa8eefdf6f6ffd3198c2ecb00166cc5fc64a2f21321772f24955fb8525c98d84"
     },
     {
       "path": "CROSS/code/cross_config.py",
@@ -418,8 +418,8 @@
     },
     {
       "path": "CROSS/docs/RESULTS.md",
-      "bytes": 5258,
-      "sha256": "f7f27d0e0cb48e94290c081a82057b171dc580e7585146d0e23fe8bb12e73c95"
+      "bytes": 6711,
+      "sha256": "905e241e312d338c350b8f51d827ecb6aefa9ef8fbe939e2cf92bace51656de0"
     },
     {
       "path": "_LICENSES/APACHE-2.0.txt",

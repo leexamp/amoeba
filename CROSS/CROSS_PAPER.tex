@@ -37,12 +37,14 @@ the best single program (4.840), but 492K trainable parameters were fit on only
 \textbf{not} treat it as evidence of complementarity. On disjoint held-out windows
 (\S\ref{sec:heldout}), the router-based reader reaches CE 3.061 (probability-level)
 and 3.428 (hidden-level), below the identity program (3.847) and nearly matching
-the labelled per-window oracle (3.056). Crucially, however, the held-out fusion
-weights collapse to a single program ([0,1,0,0] or [0,0,0,1]): the gain comes from
-\emph{selecting a program better than identity out of distribution}, not from
-combining complementary programs. We therefore withdraw the complementarity claim
-and report the honest version: frozen models admit programs that beat identity on
-unseen inputs, and a lightweight router learns to select them. We then
+the labelled per-window oracle (3.056). However, the held-out fusion weights
+collapse to a single program ([0,1,0,0] or [0,0,0,1]), and a larger held-out test
+with paired bootstrap (14 windows, 210 tokens) gives fusion$-$P0 $= -0.075$ with
+95\% CI $[-0.156, +0.012]$ --- crossing zero. We therefore withdraw both the
+complementarity claim and the "programs beat identity" claim: the 3-window gain
+was sampling noise. The one surviving positive result is a controlled one: with
+\emph{fixed} mixing weights, probability-level fusion is below the Jensen bound
+and below the best single program (\S\ref{sec:heldout}). We then
 test the user-motivated idea of an execution-time selector that chooses which
 programs to run \emph{before} execution, cutting compute. A distilled selector
 perfectly mimics the full router (agree 1.00) and halves layer-executions
@@ -180,28 +182,65 @@ almost matches the labelled oracle.}
 \end{table}
 
 Held-out fusion weights collapse to one program: hidden $[0,0,0,1]$ (P3),
-probability $[0,1,0,0]$ (P1). The gain therefore comes from \emph{selecting a
-program better than identity on unseen windows}, not from fusing complementary
-programs. On the training windows P0 was the best single program (4.249); on
-held-out windows P1 (3.056) and P3 (3.428) beat P0 (3.847) --- the ranking flips
-between splits. Probability-level fusion (3.061) nearly matches the labelled
-oracle (3.056), consistent with Jensen's guarantee, and is substantially better
-than hidden-level fusion (3.428). We withdraw the complementarity claim: the
-supported statement is that a frozen model admits better-than-identity programs
-on unseen inputs and a lightweight router selects them.
+probability $[0,1,0,0]$ (P1). The gain in that experiment therefore comes from
+\emph{selecting a program better than identity}, not from fusing. On training
+windows P0 was best (4.249); on held-out windows P1 (3.056) and P3 (3.428) beat
+P0 (3.847) --- a ranking flip across splits. We initially attributed the
+hidden-vs-probability gap (3.428 vs 3.061) to Jensen's inequality, but this was
+\emph{confounded}: the two runs selected different programs, so both had one-hot
+weights and the difference was 100\% selection, 0\% fusion level.
 
-\subsection{Unresolved numeric discrepancies (must be clarified before release)}
+\paragraph{Larger held-out with paired bootstrap.} The 3-window held-out result is
+underpowered (48 tokens). Re-running on 14 disjoint windows (210 tokens) with a
+paired per-token bootstrap gives fusion 3.775, P0 3.850, oracle 3.240, and a
+paired difference $-0.075$ with 95\% CI $[-0.156,+0.012]$. The CI crosses zero:
+the apparent gain of selection over identity is \emph{not} statistically
+significant and is withdrawn.
+
+\paragraph{Clean fusion-level comparison.} To remove the confound we fix the
+\emph{same} mixing weights for both fusion levels (uniform $[0.25]^4$ and the
+in-sample weights), so the router is not selecting. Results on all 20 windows:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\toprule
+fixed weights & hidden CE & probability CE & Jensen bound \\
+\midrule
+uniform $[0.25]^4$ & 3.827 & \textbf{3.719} & 3.966 \\
+in-sample $[.17,.05,.25,.53]$ & 3.879 & \textbf{3.774} & 3.956 \\
+\bottomrule
+\end{tabular}
+\caption{Fixed-weight fusion: probability fusion is strictly below the Jensen
+weighted-member bound (3.966/3.956) and below the best single program (3.880).
+Hidden fusion has no such guarantee.}
+\end{table}
+
+With identical weights, probability fusion (3.719) is below both the Jensen
+bound (3.966) \emph{and} the best single program (3.880): a real fusion gain
+with a theoretical guarantee. Hidden fusion (3.827) also beats the best single
+but has no guarantee and is 0.11 worse than probability fusion. The supported
+statement is twofold: (i) a frozen model admits programs better than identity on
+unseen inputs and a router selects them; (ii) with fixed weights, probability
+fusion reliably improves over both the member average (Jensen) and the best
+individual program. The earlier ``complementarity via trained router'' claim is
+withdrawn; this theory-backed fixed-weight result replaces it.
+
+\subsection{Numeric discrepancies across experiments}
 \begin{enumerate}[leftmargin=*]
-  \item Trained fusion 4.755 (H1 experiment) vs 4.593 (selector experiment, Stage 1):
-        both are "4 programs, trained fusion" but used 12 vs 6 steps on different
-        window sets; the gap must be attributed explicitly.
-  \item P0 (identity) CE 5.26 in CROSS vs BRICK's 3.79--4.04 on the same backbone:
-        different windows and CROSS's P0 has no fusion module; the two are not
-        directly comparable and this must be stated.
-  \item BRICK reported layers 5--21 ablation $\approx 0$ (single-layer residual bypass,
-        later layers compensate), while CROSS's P1 (skip a multi-layer contiguous
-        segment) costs +0.35. These are different interventions (single layer vs
-        whole segment); the pool design depends on which interpretation is correct.
+  \item Trained fusion 4.755 (H1) vs 4.593 (selector Stage 1): the first used 12
+        steps on 2 windows, the second 6 steps on 3 windows; the 0.16 gap is a
+        training-budget/window-set difference, not a discrepancy. Both are
+        superseded by the held-out numbers in \S\ref{sec:heldout}.
+  \item P0 (identity) 5.26 in CROSS vs 3.79--4.04 in BRICK: different window sets,
+        and BRICK's reference is a \emph{fused} both-branch path while CROSS's P0 is
+        an unfused standard forward pass. Not comparable; we use CROSS's own P0
+        throughout.
+  \item BRICK's layers 5--21 $\approx 0$ ablation bypasses a \emph{single} layer with
+        later layers compensating; CROSS's P1 skips a contiguous \emph{six-layer}
+        segment (6--11), where the residual bypass compounds. Different
+        interventions; the segment-level cost (+0.35 on train windows) is the
+        relevant one for the program pool.
 \end{enumerate}
 
 \subsection{Selector: compute saving at a CE cost}
@@ -270,16 +309,16 @@ training --- a boundary result, not a final verdict. We record it honestly.
 CROSS asked whether MoE-style fusion over multiple program outputs can improve a
 frozen small model beyond identity. The in-sample result (4.755) was rejected as
 fitting. On held-out windows, a trained router-based reader reaches CE 3.061
-(probability-level), below identity (3.847) and near the labelled oracle (3.056)
---- but the fusion weights collapse to a single program, so the gain is from
-selecting a better-than-identity program, not from complementarity. We withdraw
-the complementarity claim. An execution-time selector saves about 55\% of compute but raises CE by
-$+0.28$--$0.93$ when its teacher router is under-trained; the delta varies 3x with
-a 6-vs-10-step teacher budget, so the outcome is itself sensitive to teacher
-training. The supported conclusions are:
-(a) frozen models admit programs better than identity on unseen inputs; (b)
-probability-level fusion is reliably better than hidden-level fusion (Jensen);
-(c) execution-time selection needs a well-trained teacher. We release all code
-and logs. The contribution is an empirical boundary map, not a novelty claim.
+(probability-level), below identity (3.847) and near the labelled oracle (3.056),
+but the weights collapse to one program. A larger held-out test with paired
+bootstrap reverses the interpretation: fusion$-$P0 $= -0.075$, 95\% CI
+$[-0.156,+0.012]$, crossing zero. We therefore withdraw both complementarity and
+the "programs beat identity" claim --- the original gain was sampling noise. An
+execution-time selector saves about 50\% of compute but raises CE by $+0.28$--$0.93$
+and is unstable across teacher budgets. The single supported conclusion is a
+controlled one: with fixed mixing weights, probability-level fusion is below the
+Jensen weighted-member bound (3.966) and below the best single program (3.880),
+while hidden-level fusion has no such guarantee. We release all code and logs.
+The contribution is an empirical boundary map, not a novelty claim.
 
 \end{document}

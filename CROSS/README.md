@@ -63,22 +63,19 @@ higher (K program executions), but the objective is capability, not speed.
 was measured on the same 2-4 windows used for training, with 492K params / 32-64
 supervised tokens. This is fitting, not evidence of complementarity.
 
-**Held-out gatekeeper (train 0-2, test 3-5)**:
+**Held-out gatekeeper (train 0-2, test 3-5)**: initial 3-window test showed fusion
+3.061/3.428 vs P0 3.847 (Delta -0.79/-0.42), but weights collapsed to one-hot and
+the test was underpowered (48 tokens).
 
-| Split | P0 identity | oracle-min (labelled) | hidden fusion | prob fusion |
-|---|---|---|---|---|
-| train | 4.249 | 3.969 | 4.382 | 3.856 |
-| **held-out** | **3.847** | 3.056 | **3.428** | **3.061** |
+**Larger held-out (14 windows, 210 tokens) + paired bootstrap**: fusion 3.775,
+P0 3.850, paired Delta -0.075, **95% CI [-0.156, +0.012] — crosses zero**.
+The "programs beat identity" gain was sampling noise and is WITHDRAWN.
 
-Both fusion levels beat identity on held-out (Delta -0.42 / -0.79). BUT held-out
-weights collapse to a single program ([0,0,0,1] hidden, [0,1,0,0] prob): the gain is
-**selecting a program better than identity**, NOT complementary fusion. Program
-ranking flips between splits (P0 best on train, P1/P3 best on held-out).
-Probability fusion (3.061) ≈ oracle (3.056), consistent with Jensen's guarantee.
-
-**COMPLEMENTARITY CLAIM WITHDRAWN.** Supported: frozen models admit programs better
-than identity on unseen inputs, and a router learns to select them. Cost is 4x
-program executions — capability study, not acceleration. Tiny tests 5/5 PASS.
+**SURVIVING POSITIVE RESULT** (fixed weights, 20 windows, no selection):
+prob fusion 3.719 <= Jensen bound 3.966 and < best single 3.880;
+hidden fusion 3.827 (no guarantee). Probability-level fusion has a real,
+theory-backed gain when weights are fixed. Cost is 4x program executions —
+capability study, not acceleration. Tiny tests PASS.
 
 ## Selector result (2026-11-26, negative)
 
