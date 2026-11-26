@@ -1,6 +1,6 @@
 {
   "name": "Amoeba release",
-  "version": "1.6",
+  "version": "1.7",
   "license": "apache-2.0",
   "date": "2026-11-26",
   "github": "https://github.com/leexamp/Amoeba",
@@ -60,6 +60,11 @@
       "path": "README_zh_legacy.md",
       "bytes": 20730,
       "sha256": "d5c6c216631d8be0c47d449434fdc0985b837ab773396d319bb88487ad32a3d0"
+    },
+    {
+      "path": "SUMMARY.md",
+      "bytes": 8634,
+      "sha256": "656d06dd3f2139470cd7b3a434d5ada6bcd93a3b48d5f811e412ca74e6c8aef8"
     },
     {
       "path": "Amoeba-0.3B/halt_heads.pt",
