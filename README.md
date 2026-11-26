@@ -83,6 +83,13 @@ skipping a branch has an irreducible cost (+0.40-0.90 nats) because the skipped 
 information is genuinely absent. See `BRICK/BRICK_PAPER.pdf` and `BRICK/README.md`.
 All BRICK documents and code are English-only.
 
+`CROSS/` is the second follow-up: program-level MoE fusion over a frozen model.
+Several layer-execution programs run independently and a token-level router fuses
+their outputs. A held-out check revised the initial claim: the gain comes from
+selecting a program better than identity on unseen inputs, not from complementary
+fusion; an execution-time selector halves compute but costs +0.28-0.93 CE. See
+`CROSS/CROSS_PAPER.pdf` and `CROSS/README.md`. All CROSS documents/code are English-only.
+
 ## License
 
 All Amoeba weights and this repository are Apache-2.0. Base models remain Apache-2.0

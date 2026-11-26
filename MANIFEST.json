@@ -1,8 +1,8 @@
 {
   "name": "Amoeba release",
-  "version": "1.3",
+  "version": "1.4",
   "license": "apache-2.0",
-  "date": "2026-11-25",
+  "date": "2026-11-26",
   "github": "https://github.com/leexamp/Amoeba",
   "huggingface": "https://huggingface.co/leexamp",
   "files": [
@@ -43,8 +43,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 5063,
-      "sha256": "2b0567d91eccfcd8af374581fd1173b996a98e7ce61ac7a4b9636a71daa61fc7"
+      "bytes": 5556,
+      "sha256": "25cc0738aa8a5c00192f3cc18e0ab85a2e36a2057c91960303852c8374cad06e"
     },
     {
       "path": "README_legacy_earlyexit.md",
@@ -327,6 +327,101 @@
       "sha256": "48a491b9a478380c00aaef4b26204d7ad09b37bb55c161d5065f04d14ca12eab"
     },
     {
+      "path": "CROSS/CROSS_PAPER.docx",
+      "bytes": 52297,
+      "sha256": "e9edca9700919e602dac44a21ace118b8b69722f061479af7eb409d9dd6ee02b"
+    },
+    {
+      "path": "CROSS/CROSS_PAPER.pdf",
+      "bytes": 65764,
+      "sha256": "b2d61eb85b8aa26012a2e0958c73a675d1422e869c9ae723e667489a4c97dc4f"
+    },
+    {
+      "path": "CROSS/CROSS_PAPER.tex",
+      "bytes": 14517,
+      "sha256": "f1be571535b5cacdb6c0a6c4853b24840f8049edf12c713aefe35a8341f5eef1"
+    },
+    {
+      "path": "CROSS/README.md",
+      "bytes": 4764,
+      "sha256": "e565f2bee20e2d9034e44410dfc5b81a451331e48f97aa9df8bcf697b4cb962d"
+    },
+    {
+      "path": "CROSS/code/cross_config.py",
+      "bytes": 2043,
+      "sha256": "8e3ceb950b88ad3c212db7b68afa2e4cfd0a172bb165a0ddaa02c8612e302d52"
+    },
+    {
+      "path": "CROSS/code/cross_model.py",
+      "bytes": 5809,
+      "sha256": "7babb0e3cdd9beaa8f3ac8d0bb17b7ba10fabcc5cf7a336cbfd4e8c1dfe48185"
+    },
+    {
+      "path": "CROSS/code/cross_router.py",
+      "bytes": 2747,
+      "sha256": "489ca3c515d56be08239c233c64b9a2b5aaf92a85f35ec38fb8d2a3b1fb70693"
+    },
+    {
+      "path": "CROSS/code/cross_selector.py",
+      "bytes": 2337,
+      "sha256": "3a59f71b3581c9f33a412a04c9651c1d889d8482f438850b71ff1d9a4613eba4"
+    },
+    {
+      "path": "CROSS/code/layer_utils.py",
+      "bytes": 2697,
+      "sha256": "55da51742f70aa86d2eb79ebc9e0d1cd7c6632b277c6b7f9599b2c37eb828026"
+    },
+    {
+      "path": "CROSS/code/test_1b_h1.py",
+      "bytes": 3773,
+      "sha256": "6602583c64bbc6486ff33a5700ccb9b000be0e65b66f0a06280ab955d082007c"
+    },
+    {
+      "path": "CROSS/code/test_1b_selector.py",
+      "bytes": 4548,
+      "sha256": "001ab218b8ebf72c8fc0210f5ae1f37cacd62a62965a12139244993fb518a525"
+    },
+    {
+      "path": "CROSS/code/test_heldout.py",
+      "bytes": 4760,
+      "sha256": "ef7a90d35aa4c42f382cb3dcec07406bd894ac05f90dceef117ad57bd03f7876"
+    },
+    {
+      "path": "CROSS/code/test_heldout_tiny.py",
+      "bytes": 1229,
+      "sha256": "18171c6b48fa0a097b008c4b5fc43e2ca74d06f794b9391f07d7137f2844b252"
+    },
+    {
+      "path": "CROSS/code/test_selector_force_p0.py",
+      "bytes": 3070,
+      "sha256": "39004692f15e54a414a89bbb5aefbeb115c7a91a3fcd8303ea00c7c03a7045ea"
+    },
+    {
+      "path": "CROSS/code/test_selector_tiny.py",
+      "bytes": 2483,
+      "sha256": "3a073414b9828fb81db39d2d64a003a9014f28e6c2c501056a2e2a0a17f53f54"
+    },
+    {
+      "path": "CROSS/code/test_tiny.py",
+      "bytes": 3632,
+      "sha256": "9b580b2eebe3a2b956c3bb8ef22146c0c7c199de584982c42be06d610ea177d4"
+    },
+    {
+      "path": "CROSS/docs/DESIGN.md",
+      "bytes": 4853,
+      "sha256": "ea25114e9f86cac19abc17c0aa3e8a0a4e9206230968b25815a02a841c3f6144"
+    },
+    {
+      "path": "CROSS/docs/IMPLEMENTATION.md",
+      "bytes": 4049,
+      "sha256": "57a737d13286f68dd192bdad0dd988ab93b860bec52c8df6e39bf25592bb92a5"
+    },
+    {
+      "path": "CROSS/docs/RESULTS.md",
+      "bytes": 5258,
+      "sha256": "f7f27d0e0cb48e94290c081a82057b171dc580e7585146d0e23fe8bb12e73c95"
+    },
+    {
       "path": "_LICENSES/APACHE-2.0.txt",
       "bytes": 11357,
       "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
@@ -342,5 +437,5 @@
       "sha256": "6b198160f4dbfa1d792ef1b9be03db36e3e63d9edbacf1faec8d50510358bc78"
     }
   ],
-  "note": "Includes BRICK follow-up study under BRICK/ (English-only)"
+  "note": "Includes BRICK and CROSS follow-up studies (English-only)"
 }

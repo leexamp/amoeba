@@ -1,0 +1,270 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{geometry}
+\geometry{left=2.2cm,right=2.2cm,top=2.2cm,bottom=2.2cm}
+\usepackage{url}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+\usepackage{enumitem}
+
+\title{\textbf{CROSS: Cross Router Of Selector System}\\
+\large Program-Level MoE Fusion over a Frozen Language Model\\
+\large --- A Positive Fusion Result and a Negative Selector Result}
+\author{Weikai Yue, Hy 4 flash}
+\date{Independent research report --- Draft v0.1 --- 2026-11-26}
+
+\begin{document}
+\maketitle
+
+\begin{center}
+\textit{Follow-up to Amoeba and BRICK \quad $\cdot$ \quad CPU-only empirical study \quad $\cdot$ \quad All results, including negative, reported}
+\end{center}
+
+\begin{abstract}
+PoLar (ICML 2026) showed that a frozen LLM admits many valid layer-execution
+programs per input, and that a lightweight predictor can select one program that
+is often shorter and more accurate than the standard forward pass. We ask a
+different question: if several programs are valid, can we \emph{fuse} their outputs
+rather than pick one? We introduce CROSS (Cross Router Of Selector System): K
+candidate programs execute independently on the frozen backbone and a token-level
+cross router fuses their hidden states with top-k weights before the LM head.
+On a real 1B model, an in-sample fusion result (4.755) initially appeared to beat
+the best single program (4.840), but 492K trainable parameters were fit on only
+32--64 supervised tokens and both numbers used labels from the same windows; we do
+\textbf{not} treat it as evidence of complementarity. On disjoint held-out windows
+(\S\ref{sec:heldout}), the router-based reader reaches CE 3.061 (probability-level)
+and 3.428 (hidden-level), below the identity program (3.847) and nearly matching
+the labelled per-window oracle (3.056). Crucially, however, the held-out fusion
+weights collapse to a single program ([0,1,0,0] or [0,0,0,1]): the gain comes from
+\emph{selecting a program better than identity out of distribution}, not from
+combining complementary programs. We therefore withdraw the complementarity claim
+and report the honest version: frozen models admit programs that beat identity on
+unseen inputs, and a lightweight router learns to select them. We then
+test the user-motivated idea of an execution-time selector that chooses which
+programs to run \emph{before} execution, cutting compute. A distilled selector
+perfectly mimics the full router (agree 1.00) and halves layer-executions
+(93 $\to$ 46, $-$50.5\%), but CE rises by $+0.93$ nats: the six-step teacher router
+under-valued the identity program, so the selector discarded the best candidate.
+We report both results, the boundary they imply, and the full positioning relative
+to PoLar, MoE layer-sharing, and our earlier negative result (BRICK). We claim
+no novelty for programs, routers, MoE, or fusion individually; the contribution
+is their intersection and its empirical capability boundary.
+\end{abstract}
+
+\section{Introduction}
+
+This study continues our line of honest empirical boundary studies on small
+language models. Amoeba established that verifier-based speculative decoding gives
+a clean 2.015$\times$ on a full-attention 2B model but is architecture- and
+harness-dependent. BRICK asked whether a 2D parallel-branch topology of a frozen
+model enables dynamic activation; the answer was negative because a skipped
+branch's information is genuinely absent and cannot be reconstructed by fusion
+($+0.40$ nats irreducible loss).
+
+CROSS asks the complementary question: what if instead of \emph{skipping}
+information, we run several different computations and \emph{fuse} them? The
+motivation comes from PoLar (Li et al., ICML 2026): pretrained layers can be
+treated as a library of atomic functions, and a lightweight predictor generates
+an input-specific execution program $\pi=(i_1,\ldots,i_K)$ that skips or repeats
+layers. PoLar reports pass@k --- one of k programs is correct --- but always
+returns a \emph{single} program's output. MoE work (MoRE, MoUE, UniPool, 2025--2026)
+shares experts across layers \emph{within} the MoE layer. Nobody, to our knowledge,
+fuses the outputs of multiple full program executions with a token-level router.
+That intersection is CROSS.
+
+\section{Background}
+
+\subsection{PoLar: program-of-layers}
+A pretrained model of depth $D$ defines functions $f_0,\ldots,f_{D-1}$. A program
+$\pi$ is a finite sequence of layer indices; its execution composes
+$F_\pi=f_{i_K}\circ\cdots\circ f_{i_1}$. PoLar segments layers into contiguous
+modules and assigns each \{skip, keep, repeat\}, predicting the segmentation and
+operations with a 2.1M-parameter network. Findings: most valid programs are shorter
+than the standard pass; recurrence helps more than skipping; combining both is
+best; gains persist out of distribution. Its 24-layer Qwen1.5-MoE experiment reports
+0.83$\times$--0.95$\times$ latency with $+5.7$--$9.4$ accuracy points.
+
+\subsection{Why CROSS is not BRICK again}
+In BRICK, skipping a branch at readout removed information: fusion could recover
+the \emph{merging} loss but not the \emph{information} loss ($+0.40$ nats). CROSS
+executes every candidate program fully, so no information is missing; fusion only
+combines complementary complete representations. The cost is higher (K program
+executions) --- CROSS is a capability study, not an accelerator.
+
+\section{Method}
+
+\subsection{Program pool}
+We use K=4 fixed diverse programs on MiniCPM5-1B (24 layers): P0 identity (all
+layers); P1 skip a middle segment; P2 repeat a middle segment; P3 skip a late
+segment and repeat an early one. Each program keeps the final layer (readout
+interface, from Amoeba/BRICK). This is a simplified PoLar-style pool; a learned
+selector is introduced below.
+
+\subsection{Cross router (fusion)}
+Each program $j$ produces a final hidden state $h_j$. The cross router computes
+token-level weights and fuses:
+\[
+  w(t)=\mathrm{softmax}\big(\mathrm{MLP}([h_1(t);\ldots;h_K(t)])\big),\quad
+  w=\mathrm{topk\text{-}sparsify}(w,k{=}2),\quad
+  h_{\mathrm{fused}}=\sum_j w_j(t)\,s_j\,h_j(t),
+\]
+where $s_j$ are learned scalar scales. Only next-token CE supervises the router.
+Gumbel-Softmax and top-k sparsification prevent collapse to one program (BRICK's
+lesson). Trainable parameters: 492K; the 2GB backbone is frozen.
+
+\subsection{Execution-time selector (compute saving)}
+The router's top-k only sparsifies fusion weights; all K programs still execute.
+To actually save compute, a `ProgramSelector` MLP predicts program logits from a
+cheap prelude hidden state (first 4 layers) \emph{before} any program runs, and only
+the top-2 programs are executed. Hard top-k is non-differentiable, so the selector
+is trained by distillation: its target is the normalized mean fusion weight of the
+trained full router (teacher signal, not self-confidence --- the Amoeba v2 lesson).
+
+\section{Experimental Setup}
+Real MiniCPM5-1B (24 layers, hidden 1536), CPU-only (i7-1260P, 15.6GB, PyTorch
+2.15 CPU, transformers 5.24.1), bf16 on a 2.36GB resident model. Small settings
+(2--4 windows, seq 16, 6--12 steps) measure trends and boundaries, not final
+accuracy. Two dtype bugs that crash on real bf16 models but never appear in fp32
+tiny tests were found and fixed (same class as BRICK).
+
+\section{Results}
+
+\subsection{H1: fusion beats the best single program}
+\begin{table}[h]
+\centering
+\begin{tabular}{lc}
+\toprule
+Metric & Value \\ \midrule
+single-program CEs & 5.26 / 5.61 / 5.41 / 5.49 \\
+best single (per-window oracle) & 4.840 \\
+untrained fusion & 5.451 \\
+\textbf{trained fusion (12 steps)} & \textbf{4.755} \\
+\textbf{Delta vs best single} & $\mathbf{-0.085}$ \\
+fusion weights & [0.17, 0.05, 0.25, 0.53] (no collapse) \\
+trainable parameters & 492K \\
+\bottomrule
+\end{tabular}
+\caption{CROSS H1 on real 1B: fusion of K programs vs single programs.}
+\end{table}
+The trained fusion beats every single program, including the per-window oracle.
+Untrained fusion is worse than all singles, so training is essential. This is the
+opposite sign to BRICK ($+0.40$): complete programs fuse complementarily.
+
+\subsection{Held-out gatekeeper}
+\label{sec:heldout}
+Training used windows 0--2; evaluation used disjoint windows 3--5 (never seen in
+training). Two fusion levels were tested: hidden ($h=\sum_j w_j h_j$ then LM head)
+and probability ($p=\sum_j w_j\,\mathrm{softmax}(\mathrm{lm\_head}(\mathrm{norm}(h_j)))$,
+which by Jensen's inequality has CE no worse than the weighted member average).
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+Split & P0 (identity) & oracle-min (labelled) & hidden fusion & prob fusion \\
+\midrule
+train (0--2) & 4.249 & 3.969 & 4.382 & 3.856 \\
+\textbf{held-out (3--5)} & \textbf{3.847} & 3.056 & \textbf{3.428} & \textbf{3.061} \\
+\bottomrule
+\end{tabular}
+\caption{Held-out evaluation: both fusion levels beat identity; probability fusion
+almost matches the labelled oracle.}
+\end{table}
+
+Held-out fusion weights collapse to one program: hidden $[0,0,0,1]$ (P3),
+probability $[0,1,0,0]$ (P1). The gain therefore comes from \emph{selecting a
+program better than identity on unseen windows}, not from fusing complementary
+programs. On the training windows P0 was the best single program (4.249); on
+held-out windows P1 (3.056) and P3 (3.428) beat P0 (3.847) --- the ranking flips
+between splits. Probability-level fusion (3.061) nearly matches the labelled
+oracle (3.056), consistent with Jensen's guarantee, and is substantially better
+than hidden-level fusion (3.428). We withdraw the complementarity claim: the
+supported statement is that a frozen model admits better-than-identity programs
+on unseen inputs and a lightweight router selects them.
+
+\subsection{Unresolved numeric discrepancies (must be clarified before release)}
+\begin{enumerate}[leftmargin=*]
+  \item Trained fusion 4.755 (H1 experiment) vs 4.593 (selector experiment, Stage 1):
+        both are "4 programs, trained fusion" but used 12 vs 6 steps on different
+        window sets; the gap must be attributed explicitly.
+  \item P0 (identity) CE 5.26 in CROSS vs BRICK's 3.79--4.04 on the same backbone:
+        different windows and CROSS's P0 has no fusion module; the two are not
+        directly comparable and this must be stated.
+  \item BRICK reported layers 5--21 ablation $\approx 0$ (single-layer residual bypass,
+        later layers compensate), while CROSS's P1 (skip a multi-layer contiguous
+        segment) costs +0.35. These are different interventions (single layer vs
+        whole segment); the pool design depends on which interpretation is correct.
+\end{enumerate}
+
+\subsection{Selector: compute saving at a CE cost}
+\begin{table}[h]
+\centering
+\begin{tabular}{lc}
+\toprule
+Metric & Value \\ \midrule
+distill agreement (selector vs router) & 1.00 \\
+selected programs & [1, 2] \\
+full CROSS CE (93 layer-executions) & 4.593 \\
+select-before-execute CE (46 layer-executions) & 5.528 \\
+CE delta & $+0.934$ \\
+compute saving & 50.5\% \\
+\bottomrule
+\end{tabular}
+\caption{Execution top-k: half the compute, higher CE (negative result).}
+\end{table}
+The selector perfectly learns the teacher router's choice and halves compute, but
+CE rises by $+0.28$--$0.93$ across two runs with 6- vs 10-step teachers: the
+under-trained teacher's program ranking is unstable (one run selected [1,2] and
+dropped identity; another selected [0,1]), and forcing P0 in improves CE by 0.09
+but does not remove the gap. Execution top-k is thus highly sensitive to teacher
+training --- a boundary result, not a final verdict. We record it honestly.
+
+\section{Negative Results and Boundaries}
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Untrained fusion hurts} (5.451 vs best single 4.840): naive averaging
+        of program outputs is worse than every program.
+  \item \textbf{Execution top-k loses capability} ($+0.93$) when the teacher router
+        is under-trained. Compute saving is real (50.5\%), but program choice matters.
+  \item \textbf{Tiny models hide dtype and routing bugs}: fp32 toy tests passed while
+        bf16 real-model runs crashed twice; also the router collapsed on tiny but
+        not the same way on real data.
+  \item \textbf{Small sample}: 2--4 windows and 6--12 steps give trends; full
+        convergence and 79-question evaluation require a GPU.
+  \item \textbf{Cost}: K program executions make CROSS a capability study; it does
+        not accelerate inference.
+\end{enumerate}
+
+\section{Related Work (positioning, not novelty claims)}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{PoLar} (ICML 2026): single-program skip/repeat selection on frozen
+        layers. CROSS fuses multiple program outputs; we do not claim the program
+        representation is novel.
+  \item \textbf{MoE cross-layer sharing}: MoRE, ReXMoE, MoUE, UniPool (2025--2026)
+        share experts within layers; CROSS fuses program-level outputs.
+  \item \textbf{State fusion}: Mixture of States (2025) mixes layer hidden states
+        for multimodal generation; Attentive Multi-Layer Fusion (ICML 2026) fuses
+        vision-transformer layers. Neither is LLM program fusion.
+  \item \textbf{Earlier work}: LayerSkip, BitSkip (early exit); Amoeba (capability
+        criterion, speculative decoding); BRICK (2D topology negative result).
+\end{itemize}
+
+\section{Conclusion}
+CROSS asked whether MoE-style fusion over multiple program outputs can improve a
+frozen small model beyond identity. The in-sample result (4.755) was rejected as
+fitting. On held-out windows, a trained router-based reader reaches CE 3.061
+(probability-level), below identity (3.847) and near the labelled oracle (3.056)
+--- but the fusion weights collapse to a single program, so the gain is from
+selecting a better-than-identity program, not from complementarity. We withdraw
+the complementarity claim. An execution-time selector saves about 55\% of compute but raises CE by
+$+0.28$--$0.93$ when its teacher router is under-trained; the delta varies 3x with
+a 6-vs-10-step teacher budget, so the outcome is itself sensitive to teacher
+training. The supported conclusions are:
+(a) frozen models admit programs better than identity on unseen inputs; (b)
+probability-level fusion is reliably better than hidden-level fusion (Jensen);
+(c) execution-time selection needs a well-trained teacher. We release all code
+and logs. The contribution is an empirical boundary map, not a novelty claim.
+
+\end{document}
