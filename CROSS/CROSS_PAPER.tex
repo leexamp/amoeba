@@ -73,7 +73,10 @@ layers. PoLar reports pass@k --- one of k programs is correct --- but always
 returns a \emph{single} program's output. MoE work (MoRE, MoUE, UniPool, 2025--2026)
 shares experts across layers \emph{within} the MoE layer. Nobody, to our knowledge,
 fuses the outputs of multiple full program executions with a token-level router.
-That intersection is CROSS.
+That intersection is CROSS. We stress that converting dense models into
+MoE-like architectures is itself an active area (CMoE, ToMoE, ExpertWeaver);
+our claim is limited to the program-as-expert variant, not to MoEfication in
+general.
 
 \section{Background}
 
@@ -149,9 +152,11 @@ trainable parameters & 492K \\
 \end{tabular}
 \caption{CROSS H1 on real 1B: fusion of K programs vs single programs.}
 \end{table}
-The trained fusion beats every single program, including the per-window oracle.
-Untrained fusion is worse than all singles, so training is essential. This is the
-opposite sign to BRICK ($+0.40$): complete programs fuse complementarily.
+On the training windows, the trained fusion beats every single program and the
+per-window oracle, while untrained fusion (5.451) is worse than all singles. As
+\S\ref{sec:heldout} shows, this in-sample result is fitting rather than
+complementarity and the claim is withdrawn. We keep the table only as the
+motivation for the held-out test.
 
 \subsection{Held-out gatekeeper}
 \label{sec:heldout}
@@ -239,6 +244,16 @@ training --- a boundary result, not a final verdict. We record it honestly.
 
 \section{Related Work (positioning, not novelty claims)}
 \begin{itemize}[leftmargin=*]
+  \item \textbf{Dense-to-MoE conversion (MoEfication)}: CMoE (arXiv:2502.04416)
+        converts a dense LLM to MoE without training; ToMoE (ICML 2026) uncovers
+        experts by structural pruning; ExpertWeaver (arXiv:2602.15521) builds a
+        training-free router from GLU gating centroids; DOT-MoE (2026) partitions
+        FFN neurons into experts. \textbf{The dense-to-MoE idea itself is not novel
+        and we do not claim it.} Their experts are \emph{intra-layer substructures}
+        (FFN neurons, GLU groups, pruned blocks). CROSS is distinct in treating an
+        entire \emph{layer-execution program} (skip/repeat layer segments) as the
+        expert and fusing full program outputs. We claim only this specific
+        program-as-expert intersection, not MoEfication in general.
   \item \textbf{PoLar} (ICML 2026): single-program skip/repeat selection on frozen
         layers. CROSS fuses multiple program outputs; we do not claim the program
         representation is novel.

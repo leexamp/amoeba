@@ -12,8 +12,10 @@ and fuse their outputs with a token-level cross router.
 > **Positioning**: PoLar (ICML 2026) already solved *single*-program skip/repeat
 > selection. MoE work (MoRE/MoUE/UniPool) shares experts *within* layers. CROSS
 > targets the intersection nobody covers: **MoE fusion over multiple program-level
-> outputs**. The goal is capability (complementary programs correcting each other),
-> not acceleration.
+> outputs**. The goal is capability, not acceleration. Dense-to-MoE conversion
+> itself is NOT novel (CMoE, ToMoE, ExpertWeaver already do it at the FFN-neuron
+> level); CROSS claims only the *program-as-expert* variant — an entire
+> skip/repeat layer-execution program is one expert.
 
 All documents in this project are English-only.
 
